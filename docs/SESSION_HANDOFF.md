@@ -163,3 +163,14 @@ AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 
 - versionName 0.3.0 / versionCode 3. 기존 승인된 서명 및 DB schema v1 유지.
 - 릴리즈 설명: docs/releases/v0.3.0.md. 테스트·Release lint/build·서명 확인 후 게시한다.
 - 실기기 설치와 시각 검증은 미수행 상태를 유지한다. 문제 발생 시 데이터 삭제를 유도하지 않고 버전 코드가 더 높은 수정판으로 배포한다.
+
+## 2026-10-07 — v0.3.0 공개 배포 완료
+
+- 릴리즈: https://github.com/cafealpa/lifeEventApp/releases/tag/v0.3.0
+- 소스 태그: v0.3.0 → 3684bd0. versionName 0.3.0 / versionCode 3 / Android 15 이상.
+- 소스/main/tag 및 LifeDashboard.apk/update.json/SHA256SUMS.txt 공개 게시 완료. 기존 서명 및 DB schema v1 유지.
+- scripts/release.ps1 -Publish 성공. 단위 테스트 39개, Release lint/build 통과, 인증서/패키지/버전/디버깅 비활성 검증 통과.
+- 인증 없는 latest API 및 공개 APK 재다운로드 검증 통과. 메타데이터/크기/GitHub digest/SHA-256 및 공개 SHA256SUMS.txt 일치.
+- APK 25,404,376 bytes, SHA-256 89edd6a4ee4f2674bd152d78bfe38c20d71a243b8db332509c2e924c794a33aa.
+- 0.2.0 사용자는 설정 → 앱 업데이트에서 확인 가능. 실기기 설치/시각 검증은 미수행.
+- 동일 공개 저장소에 동일 산출물 범위로 게시하는 후속 릴리즈 요청은 재확인 없이 진행하도록 사용자 승인됨.

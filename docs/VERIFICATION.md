@@ -145,3 +145,12 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 - `adb devices -l`: 연결 기기 없음. 설치된 시스템 이미지는 API 30/34이고 현재 최소 지원 API 35에 맞는 AVD가 없다.
 - 미검증: 실제 화면 렌더링/스크린샷, 작은 화면과 큰 글꼴, 달력 선택/필터/상세 이동 실동작, 실기기 설치. 빌드와 단위 테스트 결과로 대체 완료 처리하지 않는다.
 - 공개 릴리즈, 소스 푸시 및 실기기 설치는 수행하지 않았다. 버전은 기존 0.2.0(2) 유지.
+
+## 2026-10-07 — v0.3.0 Release 검증
+
+- `JAVA_HOME=C:/Users/cafea/.jdks/openjdk-21.0.2`, `./scripts/release.ps1 -Publish` 성공.
+- `:app:testDebugUnitTest :app:lintRelease :app:assembleRelease`: 성공. 테스트 39개 통과. 고정 인증서·applicationId·versionName 0.3.0·versionCode 3·디버깅 비활성 검사 통과.
+- 공개 latest 릴리즈가 v0.3.0이며 draft/prerelease가 아님을 확인. 인증 없이 APK 재다운로드 후 update.json, GitHub digest, 길이, SHA-256 일치. 공개 SHA256SUMS.txt도 대조 통과.
+- 최종 게시 APK: 25,404,376 bytes; SHA-256 `89edd6a4ee4f2674bd152d78bfe38c20d71a243b8db332509c2e924c794a33aa`.
+- 커밋 후 패키징 시 Git 버전 정보가 갱신되므로 사전 로컬 준비 APK와 최종 게시 APK 해시는 다르다. 위 해시는 태그 3684bd0에서 게시하고 공개 재다운로드한 최종 파일 기준이다.
+- 실기기 설치/업데이트와 화면 시각 검증은 미수행.
