@@ -207,3 +207,13 @@ AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 
 - 앞의 로컬 수정본/미배포 기록은 당시 상태이며 이번 배포 후 결과는 아래 완료 기록을 따른다.
 - scripts/release.ps1 -Publish로 테스트/Release lint/build/인증서 확인 후 게시 및 공개 재다운로드 검증한다.
 - 실기기 설치·UI 검증은 미수행.
+
+## 2026-10-07 — v0.3.1 공개 배포 완료
+
+- https://github.com/cafealpa/lifeEventApp/releases/tag/v0.3.1 정식/latest 게시 완료. 소스 태그 31f725f, versionCode 4.
+- 지역화폐 파서 v2, 상세 보기 접기/펼치기, JSON pretty print 포함. 기존 서명과 DB schema v1 유지.
+- 단위 테스트 44개 통과, Release lint/build 및 인증서/버전/디버깅 비활성 검사 통과.
+- APK/update.json/SHA256SUMS.txt 게시. 인증 없는 latest API/공개 APK 재다운로드 및 메타데이터·GitHub digest·공개 체크섬 일치 확인.
+- APK 25,420,760 bytes; SHA-256 fc129392c17f85eb3400b78d433d188e0ee6dbd118c193aba50c8e0dc07610e6.
+- 업데이트 후 수집 활성 상태의 새로고침 또는 설정 → 저장된 원본 다시 분석으로 과거 저장 알림 재분류 가능.
+- 실제 폰 설치/화면 조작/개인 기록 대조는 미검증. 이전 항목의 미배포 상태는 이번 배포 완료로 대체한다.

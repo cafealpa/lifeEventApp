@@ -169,3 +169,10 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 - `./gradlew.bat :app:assembleDebug :app:lintDebug --console=plain`: BUILD SUCCESSFUL.
 - 상세 대화상자 UI만 수정했으며 새 단위 테스트는 추가하지 않았다. 직전 파서/저장소 테스트 44개 통과는 이전 수정의 검증 결과다.
 - `git diff --check` 통과. Debug APK 갱신 완료. 폰 설치·UI 실동작·공개 배포는 미수행.
+
+## 2026-10-07 — v0.3.1 공개 릴리즈 검증
+
+- `./scripts/release.ps1 -Publish`: 성공. 테스트 44개 통과, Release lint/build 성공, 기존 고정 서명/패키지/0.3.1(4)/디버깅 비활성 검사 통과.
+- 공개 latest 릴리즈 v0.3.1, 인증 없는 APK 재다운로드 및 크기/metadata/GitHub digest/SHA-256 일치. 공개 SHA256SUMS.txt 추가 대조 통과.
+- APK 25,420,760 bytes; SHA-256 `fc129392c17f85eb3400b78d433d188e0ee6dbd118c193aba50c8e0dc07610e6`.
+- 소스 태그 31f725f. 폰 설치·업데이트·실제 알림 원문 대조는 미수행.
