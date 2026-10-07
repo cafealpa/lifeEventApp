@@ -1,0 +1,126 @@
+# 현재 상태 및 세션 인수인계
+
+최종 갱신: 2026-10-07 (Asia/Seoul)
+
+## 바로 이어서 시작하기
+
+1. AGENTS.md → 이 문서 → DEVELOPMENT_PLAN.md → DEVELOPMENT_NOTES.md를 읽는다.
+2. 검증 상세는 [VERIFICATION.md](VERIFICATION.md), 빌드/설치는 [README](../README.md)를 확인한다.
+3. 실제 파일과 최신 사용자 요청을 확인한다. 신규 프로젝트를 다시 만들지 않는다.
+
+## 사용자 요청과 현재 결론
+
+사용자는 개발 계획 전체를 기능 우선으로 구현하도록 요청했다. 디자인은 나중에 적용한다.
+
+준비 및 Phase 1~8의 기능을 구현했다. 기본 Material UI로 동작하며 앱 빌드, JVM 테스트와 Android 14 에뮬레이터 검증을 수행했다. 개인 실기기 데이터 대조와 장기 백그라운드 동작까지 검증 완료한 것은 아니다.
+
+## 구현 상태
+
+| 영역 | 구현 |
+|---|---|
+| 프로젝트 | Kotlin/Compose 단일 app, minSdk 35(Android 15 이상), target/compileSdk 36 |
+| 저장소 | Room 5개 테이블, schema v1 내보내기, Raw 버전 이력, 중복 방지, 재처리/복구 |
+| Calendar | 최근 30일~향후 90일, 일반/반복/종일 일정, 변경 및 조회 구간 내 삭제 반영 |
+| 알림 | Listener, 원문/extras 저장, 활성 키 수명 유지, 일반 Inbox |
+| 분류 | 결제/취소, 배송/송장, 예약/취소, 태그/엔티티, 보수적 미분류 |
+| Health | 걸음/수면/운동 원본, 변경 토큰과 삭제 반영, 걸음 aggregate, 수면 단계 보존 |
+| 화면 | Dashboard, 날짜/타입별 Timeline, 원본 포함 상세, Inbox, 동의/권한/수집 상태/삭제 설정 |
+| 집계 | dirty 날짜 영속화, 변경 전후 날짜 재계산, 시간대 변경 전체 재계산 |
+| 브리핑 | 날짜별 갱신, 최근 7일 비교, 입력 집계 추적, 오전 목표 작업 및 실행 시 보완 |
+| 개인정보 | 동의 전 수집 안 함, 서버 전송/인터넷 권한 없음, 백업/기기 이전 제외, 로컬 전체 삭제 |
+
+주요 파일은 app/src/main/java/com/lifedashboard 아래 Store.kt, LifeRepository.kt, NotificationParser.kt, Collectors.kt, LifeApplication.kt, MainActivity.kt다.
+
+## 변경 전 기능 검증 결과 (minSdk 28 APK)
+
+- `:app:assembleDebug`: 성공.
+- `:app:testDebugUnitTest`: 25개 통과 (Domain 13, Repository 9, HealthNormalizer 3).
+- `:app:connectedDebugAndroidTest`: Android 14 전용 AVD에서 6개 통과. Calendar 생성/수정/삭제, Listener 실제 전달/갱신, Health Connect 권한/조회/aggregate, 네이티브 DB, 앱 실행/화면 이동 포함.
+- `:app:lintDebug`: 오류 0개. 버전 업데이트, SharedPreferences 사용 및 코드 스타일 권고 등의 경고 35개는 남아 있다.
+- 최종 Debug APK 직접 설치 및 MainActivity 실행 확인. 개인 실기기는 연결되지 않았다.
+- JDK 경로는 이 PC의 `C:/Users/cafea/.jdks/openjdk-21.0.2`. SDK는 local.properties에 기기별로 설정한다.
+- 테스트 실행 환경은 API 34 에뮬레이터이며 Health Connect의 사용자 데이터는 비어 있었다. 실제 건강 앱 데이터 값 대조와 구분한다.
+- 계측 테스트는 앱을 정리/제거할 수 있다. 수동 실행이 필요하면 생성된 APK를 다시 설치한다.
+
+## 현재 최소 지원 버전
+
+사용자 요청으로 Android 15(API 35) 이상으로 변경했다. Room Robolectric 테스트도 API 35로 실행한다. 기존 API 34 AVD에는 새 APK를 설치할 수 없으며, Android 15 이상 단말 실행 검증은 별도로 필요하다. 변경 후 빌드/자동 테스트 결과는 VERIFICATION.md의 최소 지원 변경 기록을 따른다.
+
+## 현재 빌드 도구 (AGP 업그레이드 후)
+
+AGP 9.2.1 / Gradle 9.4.1 / Kotlin 2.2.21 / KSP 2.3.2. Android Studio가 생성한 호환 플래그를 유지하며 내장 Kotlin 및 새 DSL 전환은 아직 하지 않았다. 사용 중단 예정 경고는 후속 AGP 10 전환 전에 검토한다. 앱 코드/DB 스키마/minSdk는 이번 점검에서 변경하지 않았다. 검증 결과는 VERIFICATION.md 최신 항목을 참고한다.
+
+## 산출물
+
+- APK: `app/build/outputs/apk/debug/app-debug.apk`.
+- Room 스키마: `app/schemas/com.lifedashboard.LifeDatabase/1.json`.
+- 테스트/lint 보고서: VERIFICATION.md의 경로 참고.
+- 서명은 개발용 Debug 서명이다. 공개 배포용 서명, Git 커밋/원격 푸시/Release는 수행하지 않았다. 이 작업 시작 시 Git 저장소가 없었다.
+
+## 다음 작업
+
+- [ ] 개인 Android 단말에 APK를 설치하고 권한 부여 후 실제 일정·알림·건강 데이터를 대조한다.
+- [ ] 익명화한 실제 카드/배송/예약 알림으로 파서 인식 범위를 보완한다. 원문을 로그나 문서에 남기지 않는다.
+- [ ] 제조사별 백그라운드 제한, 재부팅, 권한 철회/재허용, 반복 일정 예외를 실기기에서 확인한다.
+- [ ] API 35 및 target API 36 기기 호환성을 확인한다.
+- [ ] 사용자 요청 시 디자인을 별도 적용한다. UI 변경이 데이터 계약에 영향을 주지 않도록 한다.
+- [ ] 공개 배포 요청 시 별도 서명 및 배포 경로를 정한다.
+
+## 중요한 유지 사항
+
+- 기본 UI를 디자인 완료로 설명하지 않는다. 사용자 요청대로 기능 우선이다.
+- 첫 schema v1 이후 배포된 DB를 변경할 때는 migration이 필요하다. destructive migration으로 데이터를 지우지 않는다.
+- Raw 저장이 성공한 뒤 정규화가 실패해도 Raw를 삭제하지 않는다.
+- 집계의 updatedAt=0은 dirty 상태이며 사용자 조회에 노출하지 않는다.
+- 건강 변경 토큰 만료 시 이전 구간 정합성은 미확인으로 표시한다. 미조회/권한 없음/미집계를 정상 0으로 표시하지 않는다.
+- Notification 키는 활성 수명 기준이다. OS가 제공하지 않은 원문 또는 앱 중단 중 사라진 알림을 복구했다고 주장하지 않는다.
+- 집계 계산 시 전체 이벤트 입력을 한 번 읽는다. 장기 데이터 성능은 실측 후 날짜 범위 DAO로 개선할 수 있다.
+
+## 작업 이력
+
+### 2026-10-06
+
+AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 문서 갱신 규칙을 구성했다.
+
+### 2026-10-07
+
+사용자 요청에 따라 Phase 1~8 기능을 구현하고 기본 UI와 APK를 만들었다. 자동/에뮬레이터 검증과 주요 데이터 경계 테스트를 추가했다. 실제 기기 확인 항목과 알려진 한계를 문서로 분리했다.
+
+## 이후 갱신 방법
+
+개발 중 결정/주의사항은 DEVELOPMENT_NOTES.md, 범위/기준은 DEVELOPMENT_PLAN.md, 현재 상태/다음 작업/검증은 이 문서와 VERIFICATION.md를 함께 갱신한다. 완료 여부는 실제 근거로 판단한다.
+
+
+
+## 2026-10-07 — 실기기 반복 오류 분석 인수인계
+
+- 사용자 요청은 반복 오류의 원인 분석. 앱 소스/APK 변경이나 설치는 하지 않았다.
+- 정적 분석으로 알림 extras 변환의 메인 스레드 실행 및 앱 예외 처리 누락, 알림마다 집계 작업 추가와 전체 데이터 반복 조회를 확인했다. 실제 충돌과의 인과관계는 미확정이다. 상세는 DEVELOPMENT_NOTES.md 11절.
+- 검증: `C:/Users/cafea/AppData/Local/Android/Sdk/platform-tools/adb.exe devices -l` 결과 연결 기기 없음. 기존 테스트 코드/검증 기록과 현재 수집·저장·화면 소스를 읽었으며 이번 분석에서 빌드/테스트/실기기 재현은 수행하지 않았다.
+- [ ] 정확한 시스템 오류 문구, 기종/OS, 발생 계기 및 설치 APK 정보를 확보한다.
+- [ ] 연결 후 com.lifedashboard의 crash 로그와 ApplicationExitInfo/ANR 기록으로 Exception/ANR/OOM/시스템 종료를 구분한다. 알림 원문·건강 데이터는 문서에 남기지 않는다.
+- [ ] 실제 스택과 일치하는 최소 수정 후 API 35 이상에서 기존 활성 알림 재연결, 알림 연속 갱신, 건강 수집 중 알림 도착을 검증한다.
+- 추가 사용자 정보: 아침에 오류 표시. 현재 회사에 있어 폰 연결 및 진단 조작 불가. 오전 예약 작업과의 연관성은 미확정이며 지금 추가 단말 검증은 진행할 수 없다.
+
+
+## 2026-10-07 — 반복 오류 예상 경로 수정
+
+- 사용자 후속 요청으로 알림 변환/콜백 예외 격리, 순서 보존 IO 처리, 수집 잠금 분리, 집계 요청 병합 및 날짜 범위 조회, UI DB 조회 예외 안내를 구현했다.
+- 신규 소스: NotificationPayload.kt. 신규 테스트: NotificationPayloadTest.kt, DeriveSchedulingTest.kt 및 RepositoryTest의 날짜/시간대 집계 대조.
+- Raw/이벤트 스키마와 기존 데이터를 유지한다. DB 초기화, 폰 설치, 공개 배포는 하지 않았다. 현재 경로는 Git 저장소가 아니므로 커밋도 하지 않았다.
+- 기존 11절의 분석 전용 상태 이후 실제 수정한 결과이며 상세 계약/한계는 DEVELOPMENT_NOTES.md 12절을 따른다.
+- [ ] 사용자가 진단 가능한 환경으로 돌아오면 수정 APK를 설치하고 아침 작업·실제 알림 수집을 확인한다.
+- [ ] 다시 발생하면 실제 충돌/ANR 기록으로 현재 가설과 구분한다. 현재 회사에 있는 사용자에게 즉시 기기 조작을 요구하지 않는다.
+- 최종 검증: 테스트 30개 통과, lint 오류 0/경고 35, Debug APK 빌드 성공. 체크섬과 명령은 VERIFICATION.md의 반복 오류 보완 항목 참고. 실기기 재현 및 설치는 미수행.
+
+
+## 2026-10-07 — GitHub 업로드 및 앱 업데이트 요청
+
+- 업데이트 화면과 GitHub 릴리즈 조회/다운로드/설치 검증 구현 완료. 버전 0.2.0 (2). 새 소스 AppUpdater.kt, UpdateScreen.kt 및 업데이트 FileProvider 설정.
+- 로컬 Git 저장소 main 초기화 및 게시 대상 파일 검토. 키·토큰·DB·APK·local.properties·로그는 추적 대상에서 제외했다.
+- 테스트 38개 통과, lint 오류 0/경고 37, Debug APK 빌드 성공. Release 스크립트 PowerShell 문법 검사 통과. 현재 API 35 이상 에뮬레이터가 없어 UI/설치 실동작은 미검증.
+- [ ] 사용자 답변: 저장소 공개 여부 및 기존 Debug 서명 사용 승인/새 전용 키 선택.
+- [ ] 확정된 서명 설정과 공개 인증서 지문을 적용하고 Release 빌드 및 서명을 검증한다.
+- [ ] cafealpa/lifeEventApp 저장소 생성/소스 푸시, v0.2.0 태그와 APK/update.json/SHA256SUMS 릴리즈 게시.
+- [ ] 공개 API/파일을 인증 없이 다시 내려받아 버전과 SHA-256 대조.
+- 자동 승인 검토는 Debug 키의 Release 지속 사용만 차단했다. 화면/다운로드/테스트 작업은 완료했으며 서명 정책 확정 전 공개 게시하지 않는다.
