@@ -27,7 +27,7 @@
 | 화면 | Dashboard, 날짜/타입별 Timeline, 원본 포함 상세, Inbox, 동의/권한/수집 상태/삭제 설정 |
 | 집계 | dirty 날짜 영속화, 변경 전후 날짜 재계산, 시간대 변경 전체 재계산 |
 | 브리핑 | 날짜별 갱신, 최근 7일 비교, 입력 집계 추적, 오전 목표 작업 및 실행 시 보완 |
-| 개인정보 | 동의 전 수집 안 함, 서버 전송/인터넷 권한 없음, 백업/기기 이전 제외, 로컬 전체 삭제 |
+| 개인정보 | 동의 전 수집 안 함, 생활 데이터 서버 전송 없음, 업데이트용 인터넷 사용, 백업/기기 이전 제외, 로컬 전체 삭제 |
 
 주요 파일은 app/src/main/java/com/lifedashboard 아래 Store.kt, LifeRepository.kt, NotificationParser.kt, Collectors.kt, LifeApplication.kt, MainActivity.kt다.
 
@@ -124,3 +124,10 @@ AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 
 - [ ] cafealpa/lifeEventApp 저장소 생성/소스 푸시, v0.2.0 태그와 APK/update.json/SHA256SUMS 릴리즈 게시.
 - [ ] 공개 API/파일을 인증 없이 다시 내려받아 버전과 SHA-256 대조.
 - 자동 승인 검토는 Debug 키의 Release 지속 사용만 차단했다. 화면/다운로드/테스트 작업은 완료했으며 서명 정책 확정 전 공개 게시하지 않는다.
+
+
+### GitHub 배포 승인 반영
+
+- 공개 저장소 생성/푸시 완료: https://github.com/cafealpa/lifeEventApp (main).
+- 사용자가 기존 Debug 키로 Release 서명하는 방식을 명시 승인했다. Release debuggable=false, 인증서 지문 고정. 새 키 생성이나 앱 삭제는 하지 않았다.
+- 앞의 공개 범위/서명 승인 대기는 해소됐다. APK 릴리즈 및 공개 다운로드 검증을 진행한다.

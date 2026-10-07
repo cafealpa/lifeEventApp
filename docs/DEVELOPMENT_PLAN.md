@@ -180,6 +180,6 @@ Calendar, NotificationListener, Health Connect를 이 기반에 연결했다. �
 - [x] 공개 GitHub latest 정식 릴리즈 및 update.json 기반 버전 코드 비교.
 - [x] 다운로드 무결성/패키지/버전/서명 확인 및 완료 APK 재사용.
 - [x] 소스·태그·APK·메타데이터·체크섬을 함께 게시하는 배포 스크립트 준비.
-- [ ] 저장소 공개 범위와 기존 앱 호환 서명 정책 확정 후 GitHub 게시.
+- [x] 공개 저장소 cafealpa/lifeEventApp에 소스 게시. 기존 Debug 키를 사용하는 호환 배포 서명은 사용자 명시 승인.
 - [ ] 공개 API 및 APK 재다운로드 검증.
 - [ ] API 35 이상 단말의 권한 설정 복귀·설치 취소·실제 업데이트 설치 확인.

@@ -17,6 +17,9 @@ android {
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
+    // User-approved personal distribution: preserve updates from the existing installation.
+    // The signing key stays outside Git; release.ps1 pins the public certificate fingerprint.
+    buildTypes { getByName("release") { signingConfig = signingConfigs.getByName("debug") } }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
 }

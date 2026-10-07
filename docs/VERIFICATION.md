@@ -112,3 +112,12 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 - Git staged 파일 이름 검사에서 keystore/jks/signing.properties/local.properties/DB/log/APK/env 없음. 흔한 토큰/비밀키 패턴 검사 일치 없음.
 - Android SDK 이미지는 API 30/34만 있어 현재 minSdk 35 앱의 에뮬레이터 UI 및 설치 동작은 이번에 확인하지 않았다.
 - 실제 GitHub 저장소와 Release 게시, Release APK 서명, 공개 API/다운로드 및 실기기 설치는 정책 답변 이후 검증할 항목이다.
+
+
+### 사용자 승인 후 Release 검증
+
+- `./scripts/release.ps1`: 테스트 38개, lintRelease, assembleRelease 성공.
+- APK package=com.lifedashboard, versionName=0.2.0, versionCode=2, debuggable=false를 aapt2로 확인했다.
+- apksigner 검증 성공. 기존 Debug APK와 Release 인증서 SHA-256이 일치하며 release-signing-certificate.sha256의 고정값과 대조했다.
+- 실제 키는 Git 추적/게시 대상에서 제외했다. 기존 Debug 키로 개인 배포하는 정책은 사용자가 명시 승인했다.
+- release-output/v0.2.0에 LifeDashboard.apk, update.json, SHA256SUMS.txt 생성 완료. 게시 후 최종 공개 파일 재검증 결과를 추가한다.

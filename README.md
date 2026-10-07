@@ -77,6 +77,8 @@ AGP Upgrade Assistant의 호환 설정(`android.builtInKotlin=false`, `android.n
 ./scripts/release.ps1
 # 소스 커밋 완료 및 origin 설정 후 GitHub에 소스/태그/릴리즈 게시
 ./scripts/release.ps1 -Publish
+# 공개 API와 APK 재다운로드 검증만 다시 실행
+./scripts/verify-release.ps1 -Tag v0.2.0
 ```
 
-스크립트는 테스트/lint/Release 빌드, 인증서 지문, APK 패키지/버전/디버깅 비활성 상태를 검사하고 release-output에 자산을 만든다. 서명키 파일과 암호는 Git에 올리지 않는다. `release-signing-certificate.sha256`은 비밀키가 아닌 공개 인증서 지문이며, 다른 PC에서 실수로 다른 키를 사용하는 것을 막는다. 서명 정책 확정 후 Release 서명 설정을 적용해야 한다.
+스크립트는 테스트/lint/Release 빌드, 인증서 지문, APK 패키지/버전/디버깅 비활성 상태를 검사하고 release-output에 자산을 만든다. 서명키 파일과 암호는 Git에 올리지 않는다. `release-signing-certificate.sha256`은 비밀키가 아닌 공개 인증서 지문이며, 다른 PC에서 실수로 다른 키를 사용하는 것을 막는다. 사용자가 기존 데이터 유지 우선으로 승인한 기존 로컬 Debug 키로 Release APK를 서명한다. Release APK의 debuggable은 false다. 이 키를 잃거나 다른 PC의 자동 생성 Debug 키를 쓰면 업데이트 호환성이 깨진다. 현재 키를 별도로 안전하게 백업하고 이후에도 같은 키를 사용해야 한다. 전용 배포 키/키 회전으로의 전환은 별도 계획 없이 수행하지 않는다.

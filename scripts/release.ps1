@@ -55,4 +55,5 @@ if ($Publish) {
     if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed.' }
     gh release edit $tag --repo $repo --draft=false --latest
     if ($LASTEXITCODE -ne 0) { throw 'Release publication failed. Check the existing draft before retrying.' }
+    & (Join-Path $PSScriptRoot 'verify-release.ps1') -Tag $tag
 }
