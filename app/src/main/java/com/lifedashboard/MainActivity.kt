@@ -160,12 +160,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
             }
         }
     }
-    detail?.let { d -> AlertDialog(onDismissRequest = { vm.detail.value = null }, confirmButton = { TextButton(onClick = { vm.detail.value = null }) { Text("닫기") } }, title = { Text(d.event.title) }, text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-        Text(d.event.summary.orEmpty()); Text("시작: ${Instant.ofEpochMilli(d.event.occurredAt).atZone(ZoneId.systemDefault())}")
-        d.event.endedAt?.let { Text("종료: ${Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault())}") }
-        Text("태그: ${d.tags.joinToString { it.tag }}"); Text("엔티티: ${d.entities.joinToString { it.name }}")
-        Text("구조화 데이터\n${d.event.dataJson}"); Text("원본 버전: ${d.raw?.revision ?: "파생 데이터"}\n${d.raw?.rawJson.orEmpty()}")
-    } }) }
+    detail?.let { EventDetailDialog(it, onDismiss = { vm.detail.value = null }) }
     if (deleteConfirm) AlertDialog(onDismissRequest = { deleteConfirm = false }, title = { Text("저장된 데이터를 모두 삭제할까요?") }, text = { Text("이 앱의 원본·이벤트·집계를 삭제하고 수집을 중지해요. 원래 캘린더와 건강 앱의 데이터는 삭제하지 않아요.") }, confirmButton = { TextButton(onClick = { deleteConfirm = false; enabled = false; vm.work { vm.graph.clear() }; vm.detail.value = null }) { Text("삭제") } }, dismissButton = { TextButton(onClick = { deleteConfirm = false }) { Text("취소") } })
 }
 fun sourceLabel(source: String) = when (source) { "CALENDAR" -> "일정"; "HEALTH_CONNECT" -> "건강"; "NOTIFICATION" -> "알림"; else -> "집계/브리핑" }

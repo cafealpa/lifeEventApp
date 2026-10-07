@@ -17,10 +17,15 @@ class NotificationParser : EventParser {
         if (json.optBoolean("groupSummary") || json.optBoolean("ongoing")) {
             return listOf(ParsedEvent("NOTIFICATION", "COMMUNICATION", title.ifBlank { "알림" }, body, data.put("suppressed", true)))
         }
+        // Regional-currency notifications label the payment in the heading, often without 원.
+        // Other formats keep the existing parser; incentives are excluded from its amount candidates below.
+        if (text.contains("지역화폐") && Regex("결제\\s*(?:완료|취소)").containsMatchIn(text)) {
+            parseRegionalPayment(text, data)?.let { return listOf(it) }
+        }
         val approval = Regex("승인|결제\\s*(?:완료|취소)|일시불|할부|체크카드")
         val card = Regex("(현대|삼성|신한|국민|KB|롯데|하나|우리|농협|NH|BC|비씨)\\s*카드").find(text)?.value
         val amounts = Regex("([0-9][0-9,]*)\\s*원").findAll(text).filter {
-            !text.substring(maxOf(0, it.range.first - 12), it.range.first).contains(Regex("잔액|누적|한도|포인트|할인|캐시백"))
+            !text.substring(maxOf(0, it.range.first - 12), it.range.first).contains(Regex("잔액|누적|한도|포인트|할인|캐시백|인센티브"))
         }.toList()
         if (approval.containsMatchIn(text) && amounts.size == 1 && !Regex("승인\\s*거절|결제\\s*실패|승인\\s*실패|예정|혜택|이벤트").containsMatchIn(text)) {
             val amount = amounts.single().groupValues[1].replace(",", "").toLongOrNull()
@@ -54,5 +59,26 @@ class NotificationParser : EventParser {
         }
         return listOf(ParsedEvent("NOTIFICATION", "COMMUNICATION", title.ifBlank { "알림" }, body, data))
     }
-    companion object { const val VERSION = 1 }
+    private fun parseRegionalPayment(text: String, data: JSONObject): ParsedEvent? {
+        val number = "(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)"
+        val heading = Regex("""(?m)^\s*결제\s*(완료|취소)[ \t]*[:：]?[ \t]*($number)(?:[ \t]*원)?[ \t]*(?=\r?$|/)""").find(text) ?: return null
+        val amount = heading.groupValues[2].replace(",", "").toLongOrNull() ?: return null
+        val detail = text.substring(heading.range.last + 1).trim().removePrefix("/").trim()
+            .replace(Regex("""^(?:내용|가맹점|사용처|이용처)\s*[:：]\s*"""), "")
+        val provider = Regex("""(?:^|\s)([가-힣A-Za-z0-9]+지역화폐)(?=\s|$)""").find(detail) ?: return null
+        val merchant = detail.substring(0,provider.range.first).trim().takeIf { it.isNotEmpty() && !it.contains('\n') } ?: return null
+        val suffix = detail.substring(provider.range.last + 1).trim()
+        val incentive = if (suffix.isEmpty()) null else {
+            val match = Regex("""인센티브\s*[:：]?\s*($number)(?:\s*원)?""").matchEntire(suffix) ?: return null
+            match.groupValues[1].replace(",", "").toLongOrNull() ?: return null
+        }
+        val cancelled = heading.groupValues[1] == "취소"
+        data.put("amount", amount).put("currency", "KRW")
+            .put("paymentKind", if (cancelled) "CANCELLATION" else "APPROVAL")
+            .put("merchant", merchant).put("paymentProvider", provider.groupValues[1])
+        incentive?.let { data.put("incentiveAmount", it) }
+        return ParsedEvent("PAYMENT", "FINANCE", merchant, "${if (cancelled) "취소" else "승인"} ${amount}원", data,
+            tags = listOf("결제", "지역화폐"), entities = mapOf("COMPANY" to merchant))
+    }
+    companion object { const val VERSION = 2 }
 }

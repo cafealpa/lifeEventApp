@@ -154,3 +154,18 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 - 최종 게시 APK: 25,404,376 bytes; SHA-256 `89edd6a4ee4f2674bd152d78bfe38c20d71a243b8db332509c2e924c794a33aa`.
 - 커밋 후 패키징 시 Git 버전 정보가 갱신되므로 사전 로컬 준비 APK와 최종 게시 APK 해시는 다르다. 위 해시는 태그 3684bd0에서 게시하고 공개 재다운로드한 최종 파일 기준이다.
 - 실기기 설치/업데이트와 화면 시각 검증은 미수행.
+
+## 2026-10-07 — 지역화폐 결제 파서 보완 검증
+
+- 수정 전 `:app:testDebugUnitTest --tests com.lifedashboard.DomainTest`에서 추가한 3개 테스트가 실패하여 단위 없는 결제 누락/인센티브 오인을 재현했다. 실제 결제 원문은 테스트에 저장하지 않았다.
+- 수정 후 `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain`: BUILD SUCCESSFUL. 테스트 44개, 실패/오류 0.
+- 원 단위 유무, 제목/본문 결제 문구, 취소, 잘못된 금액·충전·예정·실패·광고·그룹 알림 제외, 기존 가맹점 표기 호환성 검증.
+- Room 통합 검증: parserVersion 1 일반 알림 → v2 결제 재분류, id/rawEventId 보존, 원본/이벤트 중복 없음, 결제액만 합산하고 취소 차감. 인센티브는 합산/차감하지 않음.
+- Debug APK: app/build/outputs/apk/debug/app-debug.apk. 버전은 0.3.0 유지. 공개 릴리즈/실기기 설치는 수행하지 않았으며 기존 공개 APK에는 수정이 포함되지 않음.
+- 실기기의 실제 extras 형태와 업데이트 후 과거 기록 대조는 미검증. 저장된 원문이 있어야 재분석 가능.
+
+## 2026-10-07 — 상세 정보 접기/JSON pretty print
+
+- `./gradlew.bat :app:assembleDebug :app:lintDebug --console=plain`: BUILD SUCCESSFUL.
+- 상세 대화상자 UI만 수정했으며 새 단위 테스트는 추가하지 않았다. 직전 파서/저장소 테스트 44개 통과는 이전 수정의 검증 결과다.
+- `git diff --check` 통과. Debug APK 갱신 완료. 폰 설치·UI 실동작·공개 배포는 미수행.

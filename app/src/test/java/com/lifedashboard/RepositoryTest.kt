@@ -136,4 +136,33 @@ class RepositoryTest {
         val events = db.dao().observeCalendarDay(start,start + 86_400_000,day.toString()).first()
         assertEquals(listOf("all-day","earlier","later"),events.map { it.id })
     }
+    @Test fun regionalCurrencyRecoveryReclassifiesOldRawWithoutDuplicatesOrAddingIncentive() = runBlocking<Unit> {
+        val zone = ZoneId.systemDefault()
+        val day = LocalDate.of(2026,10,7)
+        val time = day.atTime(10,0).atZone(zone).toInstant().toEpochMilli()
+        val payload = JSONObject().put("title","결제 완료 120,000")
+            .put("text","테스트학원 테스트지역화폐 인센티브 10,800")
+        val original = repo.ingest("NOTIFICATION","regional-payment",time,payload)
+        // Simulate the event stored by parser v1; keep the preserved original raw unchanged.
+        db.dao().put(original.copy(type = "NOTIFICATION", category = "COMMUNICATION",
+            dataJson = JSONObject().put("parserVersion",1).toString()))
+        repo.rebuildSummaries(zone,day)
+        assertEquals(0,db.dao().summariesOnce().first { it.date == day.toString() }.paymentCount)
+        val rawId = original.rawEventId
+        assertEquals(0,repo.recoverPending())
+        val recovered = requireNotNull(db.dao().event("NOTIFICATION","regional-payment"))
+        assertEquals(original.id,recovered.id)
+        assertEquals(rawId,recovered.rawEventId)
+        assertEquals("PAYMENT",recovered.type)
+        repo.rebuildSummaries(zone,day)
+        assertEquals(120000L,db.dao().summariesOnce().first { it.date == day.toString() }.paymentAmount)
+        assertEquals(1,db.dao().summariesOnce().first { it.date == day.toString() }.paymentCount)
+        repo.recoverPending()
+        assertEquals(1,db.dao().allEvents().size)
+        assertEquals(1,db.dao().rawCount())
+        repo.ingest("NOTIFICATION","regional-cancellation",time + 1000,
+            JSONObject(payload.toString()).put("title","결제 취소 120,000"))
+        repo.rebuildSummaries(zone,day)
+        assertEquals(0L,db.dao().summariesOnce().first { it.date == day.toString() }.paymentAmount)
+    }
 }

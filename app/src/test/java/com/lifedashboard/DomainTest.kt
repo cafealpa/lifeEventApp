@@ -13,6 +13,36 @@ class DomainTest {
         val p = parse("현대카드 승인 5,900원\n가맹점: 테스트카페\n잔액 50,000원")
         assertEquals("PAYMENT", p.type); assertEquals(5900L, p.data.getLong("amount")); assertEquals("테스트카페", p.data.getString("merchant"))
     }
+    @Test fun regionalCurrencySeparatesUnitlessPaymentAndIncentive() {
+        for (unit in listOf("", "원")) {
+            val p = parse("테스트학원 테스트지역화폐 인센티브 10,800$unit", "결제 완료 120,000$unit")
+            assertEquals("PAYMENT", p.type)
+            assertEquals(120000L, p.data.getLong("amount"))
+            assertEquals("테스트학원", p.data.getString("merchant"))
+            assertEquals("테스트지역화폐", p.data.getString("paymentProvider"))
+            assertEquals(10800L, p.data.getLong("incentiveAmount"))
+            assertFalse(p.data.has("cardCompany"))
+        }
+    }
+    @Test fun regionalCurrencyKeepsExistingLabelledPaymentFormat() {
+        val p = parse("테스트지역화폐\n가맹점: 테스트카페", "결제 완료 5,900원")
+        assertEquals("PAYMENT",p.type)
+        assertEquals(5900L,p.data.getLong("amount"))
+        assertEquals("테스트카페",p.data.getString("merchant"))
+    }
+    @Test fun regionalCurrencySupportsBodyHeaderAndCancellation() {
+        val p = parse("결제 취소 120,000 /내용: 테스트학원 테스트지역화폐 인센티브 10,800")
+        assertEquals("PAYMENT", p.type)
+        assertEquals("CANCELLATION", p.data.getString("paymentKind"))
+        assertEquals("테스트학원", p.data.getString("merchant"))
+    }
+    @Test fun regionalCurrencyDoesNotGuessUnlabelledOrMalformedAmounts() {
+        listOf("결제 완료 120,00", "결제 완료 120,000.50", "결제 완료 120,000 USD", "결제 완료 120,000 130,000", "결제 완료", "충전 완료 120,000", "결제 예정 120,000", "결제 실패 120,000").forEach { title ->
+            assertEquals(title, "NOTIFICATION", parse("테스트지역화폐 인센티브 10,800원", title).type)
+        }
+        assertEquals("NOTIFICATION", parse("결제 완료 시 인센티브 10,800원 혜택", "테스트지역화폐").type)
+        assertEquals("NOTIFICATION", parse("테스트지역화폐 인센티브 10,800", "결제 완료 120,000", grouped = true).type)
+    }
     @Test fun paymentCancellationIsSeparateNegativeMovement() {
         val p = parse("현대카드 승인취소 5,900원")
         assertEquals("CANCELLATION", p.data.getString("paymentKind"))
