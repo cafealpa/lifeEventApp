@@ -121,3 +121,12 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 - apksigner 검증 성공. 기존 Debug APK와 Release 인증서 SHA-256이 일치하며 release-signing-certificate.sha256의 고정값과 대조했다.
 - 실제 키는 Git 추적/게시 대상에서 제외했다. 기존 Debug 키로 개인 배포하는 정책은 사용자가 명시 승인했다.
 - release-output/v0.2.0에 LifeDashboard.apk, update.json, SHA256SUMS.txt 생성 완료. 게시 후 최종 공개 파일 재검증 결과를 추가한다.
+
+
+### 공개 릴리즈 검증 완료
+
+- `./scripts/release.ps1 -Publish`: BUILD SUCCESSFUL, main/tag 푸시, draft 생성 후 정식 latest 릴리즈 게시 성공.
+- `scripts/verify-release.ps1 -Tag v0.2.0`의 인증 없는 HTTP 호출로 latest API tag=v0.2.0, draft=false, prerelease=false 확인.
+- APK 공개 재다운로드 25,355,224 bytes. SHA-256 `4f00620b3e0672cb16efce65a794c4d74a784376ae9d1e55a93c6b9b40d67c35`, update.json 및 GitHub asset digest 일치.
+- Release lint 오류 0, 경고 37. 자동 테스트 38개 통과. 게시 로그 publish-release.log.
+- 태그 v0.2.0은 소스 커밋 71ea05f를 가리킨다. 이후 배포 결과 문서만 별도 main 커밋으로 기록한다.

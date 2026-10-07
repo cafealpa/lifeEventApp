@@ -181,5 +181,5 @@ Calendar, NotificationListener, Health Connect를 이 기반에 연결했다. �
 - [x] 다운로드 무결성/패키지/버전/서명 확인 및 완료 APK 재사용.
 - [x] 소스·태그·APK·메타데이터·체크섬을 함께 게시하는 배포 스크립트 준비.
 - [x] 공개 저장소 cafealpa/lifeEventApp에 소스 게시. 기존 Debug 키를 사용하는 호환 배포 서명은 사용자 명시 승인.
-- [ ] 공개 API 및 APK 재다운로드 검증.
+- [x] v0.2.0 공개 릴리즈 게시 및 인증 없는 latest API/APK 재다운로드 SHA-256 대조.
 - [ ] API 35 이상 단말의 권한 설정 복귀·설치 취소·실제 업데이트 설치 확인.

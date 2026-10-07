@@ -205,3 +205,8 @@ Calendar 회차, 알림 키 재사용, 한 Raw에서 여러 이벤트 생성, so
 - https://github.com/cafealpa/lifeEventApp 공개 저장소 생성 및 main 소스 푸시 완료.
 - Release 빌드는 기존 로컬 Debug 키로 서명하고 debuggable=false를 유지한다. 공개 인증서 SHA-256 지문을 release-signing-certificate.sha256에 고정해 다른 자동 생성 키로 잘못 게시하는 것을 방지한다. 이 파일은 비밀키가 아니다.
 - 실제 keystore는 기존 Android 개발 환경 경로에 유지하고 Git에 포함하지 않는다. 다른 PC로 빌드 환경을 옮길 때 동일 키를 안전하게 이전해야 한다.
+
+
+### 첫 공개 배포 결과
+
+v0.2.0 공개 배포와 인증 없는 APK 재다운로드 검증을 완료했다. 배포 파일은 고정 자산 이름 LifeDashboard.apk/update.json/SHA256SUMS.txt를 사용한다. 업데이트는 versionCode 증가를 기준으로 하며 같은 태그의 파일을 교체하지 않는다. 후속 릴리즈도 동일 서명키를 유지하고 scripts/release.ps1의 인증서 검증을 통과해야 한다.

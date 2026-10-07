@@ -131,3 +131,15 @@ AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 
 - 공개 저장소 생성/푸시 완료: https://github.com/cafealpa/lifeEventApp (main).
 - 사용자가 기존 Debug 키로 Release 서명하는 방식을 명시 승인했다. Release debuggable=false, 인증서 지문 고정. 새 키 생성이나 앱 삭제는 하지 않았다.
 - 앞의 공개 범위/서명 승인 대기는 해소됐다. APK 릴리즈 및 공개 다운로드 검증을 진행한다.
+
+
+### v0.2.0 배포 완료
+
+- 저장소: https://github.com/cafealpa/lifeEventApp
+- 릴리즈: https://github.com/cafealpa/lifeEventApp/releases/tag/v0.2.0
+- 태그 v0.2.0 소스 커밋: 71ea05f. 버전 0.2.0 / versionCode 2 / Android 15 이상.
+- LifeDashboard.apk, update.json, SHA256SUMS.txt 게시 완료. 인증 없이 latest API와 APK를 재다운로드하여 GitHub digest/메타데이터/파일 크기/SHA-256 일치 확인.
+- APK: 25,355,224 bytes; SHA-256 4f00620b3e0672cb16efce65a794c4d74a784376ae9d1e55a93c6b9b40d67c35.
+- 이전의 공개 범위/서명 승인/게시 대기 항목은 완료됐다. 실제 키는 게시하지 않았으며 Release APK는 사용자 승인한 기존 개발 인증서로 서명하고 디버깅은 비활성화했다.
+- 기존 0.1.0에는 업데이트 화면이 없어 이번 APK는 직접 설치해야 한다. 이후 설정 → 앱 업데이트에서 새 정식 릴리즈를 확인한다.
+- 실기기 설치/업데이트 및 아침 오류 재현은 여전히 미검증이다. 현재 Android 15 이상 테스트 이미지도 없어 UI 실동작 검증을 빌드/단위 테스트로 대체했다고 주장하지 않는다.
