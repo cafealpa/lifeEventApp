@@ -130,3 +130,18 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 - APK 공개 재다운로드 25,355,224 bytes. SHA-256 `4f00620b3e0672cb16efce65a794c4d74a784376ae9d1e55a93c6b9b40d67c35`, update.json 및 GitHub asset digest 일치.
 - Release lint 오류 0, 경고 37. 자동 테스트 38개 통과. 게시 로그 publish-release.log.
 - 태그 v0.2.0은 소스 커밋 71ea05f를 가리킨다. 이후 배포 결과 문서만 별도 main 커밋으로 기록한다.
+
+## 2026-10-07 — 홈 1안 / 타임라인 A안 디자인 적용
+
+실행 환경: JDK `C:/Users/cafea/.jdks/openjdk-21.0.2`, 기존 Android SDK 36. 기본 명령 실행기가 X: 볼륨 인증 오류로 실패하여 승인된 sandbox 밖 실행으로 동일 프로젝트를 검증했다.
+
+- 명령: `./gradlew.bat :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleDebugAndroidTest`
+- 결과: BUILD SUCCESSFUL. 단위 테스트 39개, 실패 0개. lint 오류 0개, 경고 37개.
+- 새 Room 회귀 검증: 홈 일정 조회의 종일 날짜 처리, 시간순 정렬, 취소 및 다음 날짜 제외.
+- UI 계측 테스트 소스는 새 상단 설정/홈 알림 보관함/날짜 버튼 경로로 갱신하고 테스트 APK까지 빌드했다. 계측 실행은 하지 않았다.
+- `git diff --check`: 공백 정리 후 통과.
+- Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
+- SHA-256: `ea566c21dd81b8b368566372f162610f0f5a283c81f967ede5878bb2f3f348c4`.
+- `adb devices -l`: 연결 기기 없음. 설치된 시스템 이미지는 API 30/34이고 현재 최소 지원 API 35에 맞는 AVD가 없다.
+- 미검증: 실제 화면 렌더링/스크린샷, 작은 화면과 큰 글꼴, 달력 선택/필터/상세 이동 실동작, 실기기 설치. 빌드와 단위 테스트 결과로 대체 완료 처리하지 않는다.
+- 공개 릴리즈, 소스 푸시 및 실기기 설치는 수행하지 않았다. 버전은 기존 0.2.0(2) 유지.

@@ -1,6 +1,6 @@
 # Life Dashboard
 
-Android에서 일정, 알림, 건강 기록을 수집하여 Raw → LifeEvent → Timeline/일간 집계/브리핑으로 저장하는 로컬 앱이다. 기능 우선 MVP이며 디자인은 기본 Material 3 UI다.
+Android에서 일정, 알림, 건강 기록을 수집하여 Raw → LifeEvent → Timeline/일간 집계/브리핑으로 저장하는 로컬 앱이다. 청록색 카드 대시보드와 날짜별 타임라인을 Jetpack Compose로 제공한다.
 
 ## 시작하기
 
@@ -43,7 +43,8 @@ AGP Upgrade Assistant의 호환 설정(`android.builtInKotlin=false`, `android.n
 - `NotificationParser.kt`: PAYMENT/DELIVERY/RESERVATION 규칙 파서.
 - `Collectors.kt`: Calendar, Health Connect, NotificationListener 및 건강 정규화.
 - `LifeApplication.kt`: 수집 동기화, 상태 기록, WorkManager 작업.
-- `MainActivity.kt`: 기능 중심 Compose 화면과 ViewModel.
+- `MainActivity.kt`: 화면 탐색/권한/상세 연결과 ViewModel.
+- `DesignScreens.kt`: 공통 테마, 대시보드 카드와 타임라인 UI.
 
 ## 문서
 

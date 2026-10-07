@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 import org.junit.*
 import org.junit.Assert.*
@@ -123,4 +124,16 @@ class RepositoryTest {
         }
     }
 
+    @Test fun dashboardCalendarUsesLocalDayAndExcludesCancelledRecords() = runBlocking<Unit> {
+        val day = LocalDate.of(2026,10,7)
+        val start = day.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant().toEpochMilli()
+        fun event(id: String, time: Long, date: String? = null, status: String = "ACTIVE") = LifeEvent(id,"CALENDAR","SCHEDULE",time,null,"테스트 일정",null,"CALENDAR",id,null,"{}",createdAt = 0,updatedAt = 0,status = status,calendarDate = date)
+        db.dao().put(event("later",start + 14 * 3_600_000))
+        db.dao().put(event("earlier",start + 9 * 3_600_000))
+        db.dao().put(event("all-day",0,day.toString()))
+        db.dao().put(event("cancelled",start,status = "CANCELLED"))
+        db.dao().put(event("tomorrow",start + 86_400_000))
+        val events = db.dao().observeCalendarDay(start,start + 86_400_000,day.toString()).first()
+        assertEquals(listOf("all-day","earlier","later"),events.map { it.id })
+    }
 }

@@ -121,13 +121,18 @@ class DeviceTest {
         val device = UiDevice.getInstance(instrumentation)
         val activity = instrumentation.startActivitySync(Intent(instrumentation.targetContext,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         try {
-            assertTrue(device.wait(Until.hasObject(By.text("Life Dashboard")),10000))
-            device.findObject(By.text("설정")).click()
+            assertTrue(device.wait(Until.hasObject(By.text("오늘 한눈에")),10000))
+            device.findObject(By.desc("설정")).click()
             assertTrue(device.wait(Until.hasObject(By.text("생활 데이터 이용 안내")),5000))
             assertNotNull(device.findObject(By.text("동의하고 수집 시작")))
             device.findObject(By.text("타임라인")).click()
-            assertTrue(device.wait(Until.hasObject(By.text("날짜 YYYY-MM-DD")),5000))
-            device.findObject(By.text("알림함")).click()
+            assertTrue(device.wait(Until.hasObject(By.desc("이전 날짜")),5000))
+            device.findObject(By.text("홈")).click()
+            repeat(6) {
+                if (!device.hasObject(By.text("알림 보관함"))) device.swipe(device.displayWidth / 2, device.displayHeight * 3 / 4, device.displayWidth / 2, device.displayHeight / 3, 20)
+            }
+            assertTrue(device.wait(Until.hasObject(By.text("알림 보관함")),5000))
+            device.findObject(By.text("알림 보관함")).click()
             assertTrue(device.wait(Until.hasObject(By.text("이 날짜에 저장된 기록이 없어요.")),5000))
         } finally { instrumentation.runOnMainSync { activity.finish() } }
     }

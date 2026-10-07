@@ -6,14 +6,13 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -52,6 +51,11 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
     }.reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val summaries = graph.repository.dao.summaries().reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val briefing = graph.repository.dao.briefing().reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    private val homeDate = MutableStateFlow(LocalDate.now())
+    val schedules = homeDate.flatMapLatest { date ->
+        val zone = ZoneId.systemDefault()
+        graph.repository.dao.observeCalendarDay(date.atStartOfDay(zone).toInstant().toEpochMilli(), date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), date.toString())
+    }.reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val busy = MutableStateFlow(false)
     val detail = MutableStateFlow<EventDetail?>(null)
     fun work(block: suspend () -> Unit) {
@@ -64,18 +68,18 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
             finally { busy.value = false }
         }
     }
-    fun refresh() = work { graph.refresh() }
+    fun refresh() { homeDate.value = LocalDate.now(); work { graph.refresh() } }
     fun open(event: LifeEvent) = work { detail.value = EventDetail(event, event.rawEventId?.let { graph.repository.dao.raw(it) }, graph.repository.dao.tagsFor(event.id), graph.repository.dao.entitiesFor(event.id)) }
     fun filter(type: String = "", inbox: Boolean = false, date: LocalDate = LocalDate.now()) { query.value = TimelineQuery(date, type, inbox) }
 }
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { MaterialTheme { LifeScreen() } } }
+    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { LifeTheme { LifeScreen() } } }
 }
 class PrivacyActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column(Modifier.padding(20.dp)) { Text("생활 데이터 이용 안내", style = MaterialTheme.typography.headlineSmall); Text(PRIVACY); Button(onClick = { finish() }) { Text("닫기") } } } } }
+        setContent { LifeTheme { Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column(Modifier.padding(20.dp)) { Text("생활 데이터 이용 안내", style = MaterialTheme.typography.headlineSmall); Text(PRIVACY); Button(onClick = { finish() }) { Text("닫기") } } } } }
     }
 }
 const val PRIVACY = "일정, 접근 가능한 알림 원문, 걸음·수면·운동 기록을 이 기기에 저장하고 Timeline과 요약에 사용해요. 생활 데이터의 서버 전송과 자동 백업은 하지 않아요. 업데이트 확인과 APK 다운로드에만 인터넷을 사용해요. 알림에는 결제 등 민감한 내용이 포함될 수 있어요. 권한은 기능별로 선택할 수 있고, 설정에서 수집 중지 및 저장 데이터 전체 삭제를 할 수 있어요. 수집 중단 이전의 알림 전체 복원은 지원하지 않아요. 건강 기록은 의료 판단에 사용하지 않아요."
@@ -84,6 +88,7 @@ const val PRIVACY = "일정, 접근 가능한 알림 원문, 걸음·수면·운
 fun LifeScreen(vm: LifeViewModel = viewModel()) {
     val context = LocalContext.current
     val events by vm.events.collectAsStateWithLifecycle()
+    val schedules by vm.schedules.collectAsStateWithLifecycle()
     val summaries by vm.summaries.collectAsStateWithLifecycle()
     val briefing by vm.briefing.collectAsStateWithLifecycle()
     val states by vm.graph.status.states.collectAsStateWithLifecycle()
@@ -91,7 +96,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     val busy by vm.busy.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
     val detail by vm.detail.collectAsStateWithLifecycle()
-    var tab by remember { mutableIntStateOf(0) }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
     var enabled by remember { mutableStateOf(vm.graph.status.enabled()) }
     var deleteConfirm by remember { mutableStateOf(false) }
     var showUpdates by rememberSaveable { mutableStateOf(false) }
@@ -103,60 +108,39 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
         onPauseOrDispose { }
     }
     fun select(type: String, date: LocalDate = LocalDate.now()) { vm.filter(type, date = date); tab = 1 }
+    BackHandler(enabled = tab != 0 && detail == null && !deleteConfirm) { tab = 0 }
     Scaffold(Modifier.safeDrawingPadding(), bottomBar = {
-        NavigationBar { listOf("대시보드", "타임라인", "알림함", "설정").forEachIndexed { i, label -> NavigationBarItem(selected = tab == i, onClick = { tab = i; if (i == 1 || i == 2) vm.filter(inbox = i == 2) }, icon = { Text(listOf("◷", "≡", "☷", "⚙")[i]) }, label = { Text(label) }) } }
+        NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+            listOf("홈", "타임라인").forEachIndexed { i, label ->
+                NavigationBarItem(selected = tab == i, onClick = { tab = i; if (i == 1) vm.filter() },
+                    icon = { LifeIcon(if(i == 0) "HOME" else "TIMELINE", tint = if(tab == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }, label = { Text(label) })
+            }
+        }
     }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Life Dashboard", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(vertical = 14.dp))
-                TextButton(onClick = { vm.refresh() }, enabled = enabled && !busy) { Text("새로고침") }
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp,end = 8.dp,top = 12.dp,bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if(tab == 2 || tab == 3) LifeIconButton("BACK","뒤로") { tab = 0 }
+                Column(Modifier.weight(1f)) {
+                    if(tab == 0) Text(LocalDate.now().format(DateTimeFormatter.ofPattern("M월 d일 EEEE", java.util.Locale.KOREAN)),style = MaterialTheme.typography.bodySmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(when(tab) { 0 -> "오늘 한눈에"; 1 -> "타임라인"; 2 -> "알림 보관함"; else -> "설정" }, style = MaterialTheme.typography.headlineSmall,fontWeight = FontWeight.Bold)
+                    if(tab == 1 || tab == 2) Text(if(tab == 1) "차곡차곡 쌓이는 나의 하루" else "수집한 알림과 분류 결과",style = MaterialTheme.typography.bodySmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                LifeIconButton("REFRESH","새로고침",enabled && !busy) { vm.refresh() }
+                if(tab != 3) LifeIconButton("SETTINGS","설정") { tab = 3 }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (message.isNotEmpty()) Text(message, Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall)
-            if (!enabled && tab != 3) { Text("설정에서 이용 안내를 확인하고 수집을 시작해 주세요.", Modifier.padding(16.dp)); TextButton(onClick = { tab = 3 }) { Text("설정 열기") } }
+            if (message.isNotEmpty() && message != "처리 완료") Text(message, Modifier.padding(horizontal = 20.dp,vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
+            if (!enabled && tab != 3) {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer,shape = MaterialTheme.shapes.medium,modifier = Modifier.padding(horizontal = 20.dp,vertical = 8.dp)) {
+                    Row(Modifier.padding(start = 12.dp,end = 4.dp),verticalAlignment = Alignment.CenterVertically) {
+                        Text("수집을 시작하고 생활 기록을 모아보세요.",Modifier.weight(1f),style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { tab = 3 }) { Text("설정 열기") }
+                    }
+                }
+            }
             when (tab) {
-                0 -> LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val today = LocalDate.now()
-                    val current = summaries.find { it.date == today.toString() }
-                    val yesterday = summaries.find { it.date == today.minusDays(1).toString() }
-                    item {
-                        Text("저장된 생활 기록", style = MaterialTheme.typography.titleMedium)
-                        if (!states.getValue("CALENDAR").startsWith("수집 완료")) Text("일정: 최신 수집 미확인 · 저장된 기록만 표시", style = MaterialTheme.typography.bodySmall)
-                        if (!states.getValue("HEALTH_CONNECT").startsWith("수집 완료")) Text("건강: 최신 수집 미확인 · 저장된 기록만 표시", style = MaterialTheme.typography.bodySmall)
-                        if (!enabled) Text("수집 중지됨", style = MaterialTheme.typography.bodySmall)
-                    }
-                    item { Metric("오늘 일정", current?.let { "${it.calendarCount}개" } ?: "집계 대기", { select("CALENDAR") }) }
-                    item { Metric("내일 일정", summaries.find { it.date == today.plusDays(1).toString() }?.let { "${it.calendarCount}개" } ?: "집계 대기", { select("CALENDAR", today.plusDays(1)) }) }
-                    item { Metric("어제 종료된 수면", yesterday?.sleepMinutes?.let { "${it / 60}시간 ${it % 60}분" } ?: "기록 없음", { select("SLEEP", today.minusDays(1)) }) }
-                    item { Metric("오늘 걸음수", current?.stepCount?.let { "${it}보" } ?: "미수집 / 기록 없음", { select("STEP_SUMMARY") }) }
-                    item { Metric("오늘 운동", current?.exerciseMinutes?.let { "${it}분" } ?: "기록 없음", { select("EXERCISE") }) }
-                    item { Metric("오늘 결제 (취소 차감)", current?.let { "${it.paymentCount}건 · ${it.paymentAmount}원" } ?: "집계 대기", { select("PAYMENT") }) }
-                    item { Metric("배송 알림", current?.let { "${it.deliveryCount}건" } ?: "집계 대기", { select("DELIVERY") }) }
-                    item { Metric("예약 알림", current?.let { "${it.reservationCount}건" } ?: "집계 대기", { select("RESERVATION") }) }
-                    item { Metric("중요 생활 알림", "결제·배송·예약은 위 카드에서 확인", { vm.filter(inbox = true); tab = 2 }) }
-                    item { Text("수집 상태", style = MaterialTheme.typography.titleMedium); states.forEach { (source, state) -> Text("${sourceLabel(source)}: $state", style = MaterialTheme.typography.bodySmall) } }
-                    item { HorizontalDivider(); Text(briefing?.title ?: "아침 브리핑", style = MaterialTheme.typography.titleMedium); Text(briefing?.summary ?: "데이터 수집 후 생성돼요.") }
-                }
-                1, 2 -> {
-                    var dateInput by remember(query.date) { mutableStateOf(query.date.toString()) }
-                    Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { vm.query.value = query.copy(date = query.date.minusDays(1), limit = 100) }) { Text("이전") }
-                        OutlinedTextField(dateInput, { dateInput = it }, label = { Text("날짜 YYYY-MM-DD") }, singleLine = true, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { runCatching { LocalDate.parse(dateInput) }.onSuccess { vm.query.value = query.copy(date = it, limit = 100) }.onFailure { vm.message.value = "날짜 형식을 확인해 주세요" } }) { Text("이동") }
-                        TextButton(onClick = { vm.query.value = query.copy(date = query.date.plusDays(1), limit = 100) }) { Text("다음") }
-                    }
-                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("" to "전체", "CALENDAR" to "일정", "HEALTH" to "건강", "SLEEP" to "수면", "STEP_SUMMARY" to "걸음", "EXERCISE" to "운동", "PAYMENT" to "결제", "DELIVERY" to "배송", "RESERVATION" to "예약", "NOTIFICATION" to "기타", "BRIEFING" to "브리핑").forEach { (type, label) -> FilterChip(query.type == type, onClick = { vm.query.value = query.copy(type = type, limit = 100) }, label = { Text(label) }) }
-                    }
-                    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (events.isEmpty()) item { Text("이 날짜에 저장된 기록이 없어요.") }
-                        items(events, key = { it.id }) { event -> Card(Modifier.fillMaxWidth().clickable { vm.open(event) }) { Column(Modifier.padding(12.dp)) {
-                            Text("${if (event.calendarDate != null) "종일" else Instant.ofEpochMilli(if (event.type == "SLEEP") event.endedAt ?: event.occurredAt else event.occurredAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))} · ${event.type} · ${event.status}", style = MaterialTheme.typography.labelMedium)
-                            Text(event.title, style = MaterialTheme.typography.titleMedium); Text(event.summary.orEmpty(), maxLines = 3)
-                        } } }
-                        if (events.size >= query.limit) item { TextButton(onClick = { vm.query.value = query.copy(limit = query.limit + 100) }) { Text("더 보기") } }
-                    }
-                }
+                0 -> DashboardContent(summaries,briefing,schedules,states,onSelect = { type,date -> select(type,date) },onInbox = { vm.filter(inbox = true); tab = 2 },onOpen = vm::open)
+                1, 2 -> TimelineContent(events,query,onQuery = { vm.query.value = it },onOpen = vm::open)
                 3 -> Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { showUpdates = true }) { Text("앱 업데이트 · ${BuildConfig.VERSION_NAME}") }
                     Text("생활 데이터 이용 안내", style = MaterialTheme.typography.titleMedium); Text(PRIVACY)
@@ -185,4 +169,3 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     if (deleteConfirm) AlertDialog(onDismissRequest = { deleteConfirm = false }, title = { Text("저장된 데이터를 모두 삭제할까요?") }, text = { Text("이 앱의 원본·이벤트·집계를 삭제하고 수집을 중지해요. 원래 캘린더와 건강 앱의 데이터는 삭제하지 않아요.") }, confirmButton = { TextButton(onClick = { deleteConfirm = false; enabled = false; vm.work { vm.graph.clear() }; vm.detail.value = null }) { Text("삭제") } }, dismissButton = { TextButton(onClick = { deleteConfirm = false }) { Text("취소") } })
 }
 fun sourceLabel(source: String) = when (source) { "CALENDAR" -> "일정"; "HEALTH_CONNECT" -> "건강"; "NOTIFICATION" -> "알림"; else -> "집계/브리핑" }
-@Composable fun Metric(title: String, value: String, click: () -> Unit) { Card(Modifier.fillMaxWidth().clickable(onClick = click)) { Column(Modifier.padding(14.dp)) { Text(title, style = MaterialTheme.typography.labelLarge); Text(value, style = MaterialTheme.typography.titleMedium) } } }

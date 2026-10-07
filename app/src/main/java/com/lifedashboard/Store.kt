@@ -46,6 +46,8 @@ interface LifeDao {
     suspend fun summaryEvents(start: Long, end: Long, date: String): List<LifeEvent>
     @Query("SELECT * FROM life_event WHERE type='CALENDAR' AND status='ACTIVE' AND ((calendarDate IS NOT NULL AND calendarDate=:date) OR (calendarDate IS NULL AND occurredAt>=:start AND occurredAt<:end))")
     suspend fun calendarForDay(start: Long, end: Long, date: String): List<LifeEvent>
+    @Query("SELECT * FROM life_event WHERE type='CALENDAR' AND status='ACTIVE' AND ((calendarDate IS NOT NULL AND calendarDate=:date) OR (calendarDate IS NULL AND occurredAt>=:start AND occurredAt<:end)) ORDER BY CASE WHEN calendarDate IS NOT NULL THEN 0 ELSE 1 END, occurredAt,id")
+    fun observeCalendarDay(start: Long, end: Long, date: String): Flow<List<LifeEvent>>
     @Query("SELECT * FROM daily_summary ORDER BY date") suspend fun summaryRows(): List<DailySummary>
     @Upsert suspend fun putSummary(summary: DailySummary)
     @Query("DELETE FROM daily_summary") suspend fun clearSummaries()
