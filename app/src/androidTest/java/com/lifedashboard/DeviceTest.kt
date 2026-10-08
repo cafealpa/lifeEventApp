@@ -34,8 +34,8 @@ class DeviceTest {
             repo.ingest("NOTIFICATION","device-test",time,payload); repo.reprocess()
             assertEquals(1,db.dao().rawCount()); assertEquals("PAYMENT",db.dao().allEvents().single().type)
             assertEquals(e.id,db.dao().timeline(0,Long.MAX_VALUE,"", "",false,100).first().single().id)
-            repo.rebuildSummaries(); repo.generateBriefing()
-            assertNotNull(db.dao().event("DERIVED","briefing:${LocalDate.now()}"))
+            repo.rebuildSummaries()
+            assertNull(db.dao().event("DERIVED","briefing:${LocalDate.now()}"))
         } finally { db.close() }
     }
 

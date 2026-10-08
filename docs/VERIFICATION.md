@@ -256,3 +256,7 @@ JDK 21에서 `scripts/release.ps1` 성공(Gradle 1분 54초). 단위 테스트 7
 ### v0.6.0 게시 결과
 
 소스 태그 6404052 및 정식 v0.6.0 게시 성공. GitHub 응답에서 draft=false/prerelease=false, APK/메타데이터/체크섬 uploaded 확인. APK 크기 25,732,196 bytes 및 GitHub digest와 로컬 SHA-256 일치. 공개 재다운로드 검증은 사용자 요청으로 수행하지 않았다. Release lint 오류 0/경고 41.
+
+## 2026-10-08 — 홈 카드 통합 및 브리핑 종료 검증
+
+JDK 21에서 `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --console=plain` 성공. 후속 테스트 추가 뒤 `:app:testDebugUnitTest` 재실행 성공. 홈 일정 시작/종료 및 종일 구분, 최근 활성 배송 상태와 완료 알림 수, 브리핑 없이 집계 완료, 기존 BRIEFING 행 보존 및 타임라인 제외를 검증했다. lint 오류 0/경고 41, `git diff --check` 통과. 계측 테스트는 빌드만 수행했으며 단말 렌더링/기존 아침 예약 취소 실동작/공개 배포는 미수행.

@@ -109,16 +109,12 @@ class LifeRepository(val db: LifeDatabase, rules: () -> ParserRuleSet = { Parser
         ingest(event.sourceType, requireNotNull(event.sourceId), event.occurredAt, json)
     }
 
-    suspend fun needsDerivation(zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone), now: Long = System.currentTimeMillis()): Boolean = mutex.withLock {
+    suspend fun needsDerivation(zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone)): Boolean = mutex.withLock {
         val rows = dao.summaryRows()
         if (rows.any { it.updatedAt == 0L || JSONObject(it.summaryJson).optString("zone") != zone.id }) return@withLock true
         val dates = rows.map { it.date }.toSet()
         if ((-8L..1L).any { today.plusDays(it).toString() !in dates }) return@withLock true
-        val briefing = dao.event("DERIVED", "briefing:$today") ?: return@withLock true
-        val inputs = org.json.JSONArray(rows.filter { it.date >= today.minusDays(8).toString() && it.date <= today.toString() }.map { JSONObject().put("date", it.date).put("updatedAt", it.updatedAt) })
-        val data = JSONObject(briefing.dataJson)
-        val events = dao.summaryEvents(today.atStartOfDay(zone).toInstant().toEpochMilli(), today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), today.toString())
-        data.optInt("generatorVersion") != TodayBriefing.VERSION || now >= data.optLong("nextChangeAt", Long.MAX_VALUE) || data.optString("eventInputs") != TodayBriefing.inputs(events) || data.optString("zone") != zone.id || data.optJSONArray("inputSummaryUpdatedAt")?.toString() != inputs.toString()
+        false
     }
 
     suspend fun rebuildSummaries(zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone), force: Boolean = false) = mutex.withLock {
@@ -139,21 +135,6 @@ class LifeRepository(val db: LifeDatabase, rules: () -> ParserRuleSet = { Parser
                 dao.putSummary(SummaryCalculator.calculate(date, events, zone))
             }
         }
-    }
-
-    suspend fun generateBriefing(today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault(), now: Long = System.currentTimeMillis()) = mutex.withLock {
-        val summaries = dao.summariesOnce()
-        val current = summaries.find { it.date == today.toString() }
-        val events = dao.summaryEvents(today.atStartOfDay(zone).toInstant().toEpochMilli(), today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), today.toString())
-        val content = TodayBriefing.build(today, zone, now, current, events)
-        val body = TodayBriefing.text(content)
-        val key = "briefing:$today"
-        val old = dao.event("DERIVED", key)
-        val data = content.put("schemaVersion", 1).put("generatorVersion", TodayBriefing.VERSION).put("date", today.toString())
-            .put("zone", zone.id).put("inputFrom", today.minusDays(8).toString()).put("inputTo", today.toString()).put("generatedAt", now)
-            .put("inputSummaryUpdatedAt", org.json.JSONArray(summaries.filter { it.date >= today.minusDays(8).toString() && it.date <= today.toString() }.map { JSONObject().put("date", it.date).put("updatedAt", it.updatedAt) }))
-        dao.put(LifeEvent(old?.id ?: UUID.randomUUID().toString(), "BRIEFING", "LIFE", today.atStartOfDay(zone).toInstant().toEpochMilli(), null,
-            "$today 오늘의 브리핑", body, "DERIVED", key, null, data.toString(), 0.5, old?.createdAt ?: now, now))
     }
 
     suspend fun purgeExpiredNotifications(now: Long = System.currentTimeMillis()): Int = mutex.withLock {
@@ -219,20 +200,5 @@ object SummaryCalculator {
             exercises.takeIf { it.isNotEmpty() }?.let { duration(it.map { e -> maxOf(start, e.occurredAt) to minOf(end, e.endedAt ?: e.occurredAt) }) },
             payment.size, amount, day.count { it.type == "CALENDAR" }, day.count { it.type == "DELIVERY" }, day.count { it.type == "RESERVATION" },
             JSONObject().put("version", 1).put("zone", zone.id).put("healthMissingIsUnknown", true).toString(), System.currentTimeMillis())
-    }
-}
-
-object BriefingBuilder {
-    fun build(yesterday: DailySummary?, today: DailySummary?, history: List<Long>, morning: Int): String = buildString {
-        appendLine("좋은 아침이에요.")
-        appendLine("어제 종료된 수면: ${yesterday?.sleepMinutes?.let { "${it / 60}시간 ${it % 60}분" } ?: "기록 없음"}")
-        appendLine("어제 걸음수: ${yesterday?.stepCount?.let { "${it}보" } ?: "미수집"}")
-        appendLine("어제 운동: ${yesterday?.exerciseMinutes?.let { "${it}분" } ?: "기록 없음"}")
-        appendLine("저장된 오늘 일정: ${today?.calendarCount ?: 0}개 (오전 ${morning}개)")
-        if (history.size >= 3 && yesterday?.sleepMinutes != null) {
-            val diff = yesterday.sleepMinutes - history.average().toLong()
-            appendLine("이전 7일 중 ${history.size}일 평균보다 수면이 ${kotlin.math.abs(diff)}분 ${if (diff >= 0) "길어요" else "짧아요"}.")
-        } else appendLine("수면 비교에 필요한 기록이 부족해요.")
-        append("권한이나 수집 중단으로 빠진 데이터가 있을 수 있어요. 수집 상태를 함께 확인해 주세요.")
     }
 }

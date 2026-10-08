@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -119,13 +120,19 @@ private fun SectionTitle(title: String, action: String = "전체 보기", onClic
 
 @Composable
 private fun StatCard(title: String, value: String, type: String, note: String, modifier: Modifier, onClick: () -> Unit) {
-    Card(onClick, modifier, colors = CardDefaults.cardColors(containerColor = Color.White)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val accent = when (type) {
+        "CALENDAR", "SLEEP" -> Color(0xFF6456AD)
+        "PAYMENT" -> Color(0xFFA44C20)
+        "DELIVERY", "RESERVATION" -> Color(0xFF2863AA)
+        else -> Teal
+    }
+    Card(onClick, modifier, shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(accent.copy(alpha = 0.12f), Color(0xFFF1F5FA)))).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LifeIcon(type); Text(title, style = MaterialTheme.typography.labelLarge)
+                LifeIcon(type, tint = accent); Text(title, style = MaterialTheme.typography.labelLarge)
             }
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(note, style = MaterialTheme.typography.bodySmall, color = Muted)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = accent)
+            Text(note, style = MaterialTheme.typography.bodySmall, color = Ink)
         }
     }
 }
@@ -143,31 +150,32 @@ private fun SummaryRow(type: String, title: String, subtitle: String, onClick: (
 }
 
 @Composable
-fun DashboardContent(summaries: List<DailySummary>, briefing: LifeEvent?, schedules: List<LifeEvent>, states: Map<String,String>, onLaunchApp: (String) -> Unit, onSelect: (String, LocalDate) -> Unit, onInbox: () -> Unit, onOpen: (LifeEvent) -> Unit) {
-    val today = LocalDate.now()
+fun DashboardContent(summaries: List<DailySummary>, schedules: List<LifeEvent>, notifications: List<LifeEvent>, states: Map<String,String>, onLaunchApp: (String) -> Unit, onSelect: (String, LocalDate) -> Unit, onInbox: () -> Unit, onOpen: (LifeEvent) -> Unit) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(30_000) } }
+    val today = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate()
     val current = summaries.find { it.date == today.toString() }
     val healthNote = if (states["HEALTH_CONNECT"]?.startsWith("수집 완료") == true) "저장된 건강 기록" else "최신 수집 미확인"
     val calendarNote = if (states["CALENDAR"]?.startsWith("수집 완료") == true) "오늘의 저장 일정" else "최신 수집 미확인"
-    val todayBriefing = briefing?.takeIf { Instant.ofEpochMilli(it.occurredAt).atZone(ZoneId.systemDefault()).toLocalDate() == today }
+    val scheduleNote = HomeCardDetails.schedule(schedules, now, ZoneId.systemDefault()) + "\n$calendarNote"
+    val latestPayment = notifications.firstOrNull { it.type == "PAYMENT" }
+    val latestReservation = notifications.firstOrNull { it.type == "RESERVATION" }
     LazyColumn(contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            BriefingCard(todayBriefing)
-        }
-        item {
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("오늘 일정", current?.let { "${it.calendarCount}개" } ?: "집계 대기", "CALENDAR", calendarNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("CALENDAR") }
-                StatCard("오늘 종료된 수면", current?.sleepMinutes?.let { "${it / 60}시간 ${it % 60}분" } ?: "기록 없음", "SLEEP", healthNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("SLEEP") }
+                StatCard("오늘 일정", current?.let { "${it.calendarCount}개" } ?: "집계 대기", "CALENDAR", scheduleNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("CALENDAR") }
+                StatCard("오늘 종료된 수면", current?.sleepMinutes?.let { "${it / 60}시간 ${it % 60}분" } ?: "기록 없음", "SLEEP", "오늘 종료된 수면 기록 기준\n$healthNote", Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("SLEEP") }
             }
         }
         item {
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("오늘 걸음수", current?.stepCount?.let { "${String.format(Locale.KOREAN,"%,d",it)}보" } ?: "기록 없음", "STEP_SUMMARY", healthNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("STEP_SUMMARY") }
-                StatCard("오늘 운동", current?.exerciseMinutes?.let { "${it}분" } ?: "기록 없음", "EXERCISE", healthNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("EXERCISE") }
+                StatCard("오늘 걸음수", current?.stepCount?.let { "${String.format(Locale.KOREAN,"%,d",it)}보" } ?: "기록 없음", "STEP_SUMMARY", "오늘 누적 걸음수\n$healthNote", Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("STEP_SUMMARY") }
+                StatCard("오늘 운동", current?.exerciseMinutes?.let { "${it}분" } ?: "기록 없음", "EXERCISE", "오늘 기록된 운동 시간\n$healthNote", Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("EXERCISE") }
             }
         }
         item {
             SectionTitle("오늘 일정") { onSelect("CALENDAR",today) }
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0EDFA))) {
                 if (schedules.isEmpty()) Text("저장된 일정이 없어요.\n$calendarNote", Modifier.fillMaxWidth().padding(20.dp), color = Muted)
                 schedules.take(3).forEachIndexed { index, event ->
                     if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Paper)
@@ -178,13 +186,16 @@ fun DashboardContent(summaries: List<DailySummary>, briefing: LifeEvent?, schedu
         }
         item {
             SectionTitle("생활 알림", "알림 보관함") { onInbox() }
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                SummaryRow("DELIVERY", "배송 알림", current?.let { "오늘 ${it.deliveryCount}건" } ?: "집계 대기") { onSelect("DELIVERY",today) }
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Paper)
-                SummaryRow("PAYMENT", "오늘 결제", current?.let { "${it.paymentCount}건 · ${String.format(Locale.KOREAN,"%,d",it.paymentAmount)}원" } ?: "집계 대기") { onSelect("PAYMENT",today) }
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Paper)
-                SummaryRow("RESERVATION", "예약 알림", current?.let { "오늘 ${it.reservationCount}건" } ?: "집계 대기") { onSelect("RESERVATION",today) }
-            }
+        }
+        item {
+            StatCard("오늘 결제", current?.let { "${String.format(Locale.KOREAN,"%,d",it.paymentAmount)}원" } ?: "집계 대기", "PAYMENT",
+                current?.let { "결제·취소 알림 ${it.paymentCount}건\n" + (latestPayment?.let { event -> "최근 · ${event.title}" } ?: "저장된 결제 알림 없음") } ?: "저장된 결제 기록을 확인하고 있어요", Modifier.fillMaxWidth()) { onSelect("PAYMENT",today) }
+        }
+        item {
+            StatCard("오늘 배송 알림", current?.let { "${it.deliveryCount}건" } ?: "집계 대기", "DELIVERY", HomeCardDetails.delivery(notifications) + "\n건수는 물품 수가 아닌 알림 수예요", Modifier.fillMaxWidth()) { onSelect("DELIVERY",today) }
+        }
+        item {
+            StatCard("오늘 예약 알림", current?.let { "${it.reservationCount}건" } ?: "집계 대기", "RESERVATION", latestReservation?.let { "최근 · ${it.title}\n${it.summary.orEmpty()}" } ?: "저장된 예약 알림 없음", Modifier.fillMaxWidth()) { onSelect("RESERVATION",today) }
         }
     }
 }
@@ -201,7 +212,7 @@ fun TimelineContent(events: List<LifeEvent>, query: TimelineQuery, onQuery: (Tim
     LaunchedEffect(query.date,query.type,query.inbox,query.oldestFirst) { listState.scrollToItem(0) }
     Column {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("" to "전체", "CALENDAR" to "일정", "HEALTH" to "건강", "PAYMENT" to "결제", "DELIVERY" to "배송", "RESERVATION" to "예약", "ADVERTISEMENT" to "광고", "SLEEP" to "수면", "STEP_SUMMARY" to "걸음", "EXERCISE" to "운동", "NOTIFICATION" to "기타", "BRIEFING" to "브리핑").forEach { (type,label) ->
+            listOf("" to "전체", "CALENDAR" to "일정", "HEALTH" to "건강", "PAYMENT" to "결제", "DELIVERY" to "배송", "RESERVATION" to "예약", "ADVERTISEMENT" to "광고", "SLEEP" to "수면", "STEP_SUMMARY" to "걸음", "EXERCISE" to "운동", "NOTIFICATION" to "기타").forEach { (type,label) ->
                 FilterChip(query.type == type, { onQuery(query.copy(type = type,limit = 100)) }, label = { Text(label) }, shape = RoundedCornerShape(50), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Teal, selectedLabelColor = Color.White))
             }
         }

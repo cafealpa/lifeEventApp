@@ -111,7 +111,6 @@ class DomainTest {
         val events = listOf(event("1","PAYMENT","2026-10-07T09:00",data="{\"amount\":5900,\"currency\":\"KRW\",\"paymentKind\":\"APPROVAL\"}"),event("2","PAYMENT","2026-10-07T10:00",data="{\"amount\":1900,\"currency\":\"KRW\",\"paymentKind\":\"CANCELLATION\"}"),event("3","PAYMENT","2026-10-07T11:00",data="{\"amount\":100,\"currency\":\"USD\"}"))
         assertEquals(4000L,SummaryCalculator.calculate(date,events,zone).paymentAmount)
     }
-    @Test fun insufficientHistoryDoesNotInventAverage() { assertTrue(BriefingBuilder.build(null,null,listOf(300),0).contains("기록이 부족")) }
     @Test fun sleepStagesExcludeAwakeIntervals() {
         val start = time("2026-10-06T23:00"); val middle = time("2026-10-07T02:00"); val end = time("2026-10-07T06:00")
         val e = event("s","SLEEP","2026-10-06T23:00","2026-10-07T06:00",data="{\"sleepIntervals\":[[$start,$middle],[${middle+3_600_000},$end]]}")

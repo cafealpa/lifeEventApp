@@ -53,8 +53,11 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
     val summaryState = graph.repository.dao.observeSummaryRows().reportReadFailure()
         .runningFold(DashboardSummaryState()) { previous, rows -> previous.update(rows) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, DashboardSummaryState())
-    val briefing = graph.repository.dao.briefing().reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     private val homeDate = MutableStateFlow(LocalDate.now())
+    val homeNotifications = homeDate.flatMapLatest { date ->
+        val zone = ZoneId.systemDefault()
+        graph.repository.dao.observeHomeNotifications(date.atStartOfDay(zone).toInstant().toEpochMilli(), date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
+    }.reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val schedules = homeDate.flatMapLatest { date ->
         val zone = ZoneId.systemDefault()
         graph.repository.dao.observeCalendarDay(date.atStartOfDay(zone).toInstant().toEpochMilli(), date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), date.toString())
@@ -72,12 +75,13 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun refresh(force: Boolean = true) { homeDate.value = LocalDate.now(); work { graph.refresh(force = force) } }
-    fun updateBriefingClock() {
+    fun updateHomeDate() {
+        if (homeDate.value == LocalDate.now()) return
         homeDate.value = LocalDate.now()
         viewModelScope.launch(Dispatchers.IO) {
             try { graph.derive() }
             catch (e: CancellationException) { throw e }
-            catch (e: Exception) { message.value = "브리핑 갱신 실패: ${e.javaClass.simpleName}" }
+            catch (e: Exception) { message.value = "날짜 갱신 실패: ${e.javaClass.simpleName}" }
         }
     }
     fun open(event: LifeEvent) = work { detail.value = EventDetail(event, event.rawEventId?.let { graph.repository.dao.raw(it) }, graph.repository.dao.tagsFor(event.id), graph.repository.dao.entitiesFor(event.id)) }
@@ -112,6 +116,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     val context = LocalContext.current
     val events by vm.events.collectAsStateWithLifecycle()
     val schedules by vm.schedules.collectAsStateWithLifecycle()
+    val homeNotifications by vm.homeNotifications.collectAsStateWithLifecycle()
     val summaryState by vm.summaryState.collectAsStateWithLifecycle()
     val summaries = summaryState.summaries
     val aggregating by vm.graph.aggregating.collectAsStateWithLifecycle()
@@ -120,7 +125,6 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
         if (summaryState.pending || aggregating) { delay(700); showAggregationBadge = true }
         else showAggregationBadge = false
     }
-    val briefing by vm.briefing.collectAsStateWithLifecycle()
     val states by vm.graph.status.states.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
@@ -145,7 +149,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     val screenScope = rememberCoroutineScope()
     LifecycleResumeEffect(Unit) {
         vm.refresh(force = false)
-        val clockJob = screenScope.launch { while (true) { delay(60_000); vm.updateBriefingClock() } }
+        val clockJob = screenScope.launch { while (true) { delay(60_000); vm.updateHomeDate() } }
         onPauseOrDispose { clockJob.cancel() }
     }
     fun select(type: String, date: LocalDate = LocalDate.now()) { vm.filter(type, date = date); tab = 1 }
@@ -194,7 +198,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                 }
             }
             when (tab) {
-                0 -> DashboardContent(summaries,briefing,schedules,states,onLaunchApp = { type ->
+                0 -> DashboardContent(summaries,schedules,homeNotifications,states,onLaunchApp = { type ->
                     if (!appLinks.open(type)) {
                         if (appLinks.selected(type) != null) vm.message.value = "연결한 앱을 열 수 없어요. 앱을 다시 선택해 주세요."
                         launchAfterPick = true
@@ -283,4 +287,4 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     detail?.let { EventDetailDialog(it, busy = busy, message = message, onClassify = { type, amount, cancelled -> vm.classify(it.event.id,type,amount,cancelled) }, onDismiss = { vm.detail.value = null }) }
     if (deleteConfirm) AlertDialog(onDismissRequest = { deleteConfirm = false }, title = { Text("저장된 데이터를 모두 삭제할까요?") }, text = { Text("이 앱의 원본·이벤트·집계를 삭제하고 수집을 중지해요. 원래 캘린더와 건강 앱의 데이터는 삭제하지 않아요.") }, confirmButton = { TextButton(onClick = { deleteConfirm = false; enabled = false; vm.work { vm.graph.clear() }; vm.detail.value = null }) { Text("삭제") } }, dismissButton = { TextButton(onClick = { deleteConfirm = false }) { Text("취소") } })
 }
-fun sourceLabel(source: String) = when (source) { "CALENDAR" -> "일정"; "HEALTH_CONNECT" -> "건강"; "NOTIFICATION" -> "알림"; else -> "집계/브리핑" }
+fun sourceLabel(source: String) = when (source) { "CALENDAR" -> "일정"; "HEALTH_CONNECT" -> "건강"; "NOTIFICATION" -> "알림"; else -> "집계" }

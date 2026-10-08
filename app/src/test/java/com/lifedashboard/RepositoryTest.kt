@@ -53,7 +53,7 @@ class RepositoryTest {
         repo.ingest("NOTIFICATION","key",100,payload("일반 메시지"))
         assertTrue(db.dao().tagsFor(updated.id).isEmpty()); assertTrue(db.dao().entitiesFor(updated.id).isEmpty())
     }
-    @Test fun movingCalendarRebuildsOldAndNewDaysAndBriefingIsIdempotent() = runBlocking<Unit> {
+    @Test fun movingCalendarRebuildsOldAndNewDays() = runBlocking<Unit> {
         val zone = ZoneId.of("Asia/Seoul"); val day = LocalDate.of(2026,10,7)
         val json = JSONObject().put("type","CALENDAR").put("category","SCHEDULE").put("title","치과")
         repo.ingest("CALENDAR","1",day.atTime(9,0).atZone(zone).toInstant().toEpochMilli(),json)
@@ -65,8 +65,6 @@ class RepositoryTest {
         repo.rebuildSummaries(zone,day)
         assertEquals(0,db.dao().summariesOnce().first { it.date == day.toString() }.calendarCount)
         assertEquals(1,db.dao().summariesOnce().first { it.date == day.plusDays(1).toString() }.calendarCount)
-        repo.generateBriefing(day,zone); val id = db.dao().event("DERIVED","briefing:$day")!!.id
-        repo.generateBriefing(day,zone); assertEquals(id,db.dao().event("DERIVED","briefing:$day")!!.id)
     }
     @Test fun deletedStateSurvivesReplayAndClearRemovesAll() = runBlocking<Unit> {
         val e = repo.ingest("CALENDAR","1",100,JSONObject().put("type","CALENDAR").put("title","일정"))

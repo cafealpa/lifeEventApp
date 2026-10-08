@@ -42,7 +42,7 @@ class DeriveSchedulingTest {
         graph.acceptNotification("payment", time, JSONObject().put("title", "알림").put("text", "결제 완료 1009원"))
         assertEquals(job.id, pending().single().id)
         graph.derive()
-        assertNotNull(graph.repository.dao.event("DERIVED", "briefing:${java.time.LocalDate.now()}"))
+        assertNull(graph.repository.dao.event("DERIVED", "briefing:${java.time.LocalDate.now()}"))
         // A final change after derivation must invalidate the cache and replace the pending request.
         graph.acceptNotification("payment", time, JSONObject().put("title", "알림").put("text", "현대카드 승인 5,900원"))
         assertNotEquals(job.id, pending().single().id)

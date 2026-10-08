@@ -38,12 +38,11 @@ interface LifeDao {
     @Query("SELECT * FROM life_event WHERE sourceType='CALENDAR' AND type='CALENDAR' AND status IN ('ACTIVE','DUPLICATE') AND (occurredAt IN (:times) OR calendarDate IN (:dates))")
     suspend fun calendarDuplicateCandidates(times: List<Long>, dates: List<String>): List<LifeEvent>
     @Upsert suspend fun put(event: LifeEvent)
-    @Query("SELECT * FROM life_event WHERE status NOT IN ('DELETED','DUPLICATE') AND ((calendarDate IS NOT NULL AND calendarDate=:date) OR (calendarDate IS NULL AND ((type='SLEEP' AND endedAt>=:start AND endedAt<:end) OR (type='EXERCISE' AND occurredAt<:end AND endedAt>:start) OR (type NOT IN ('SLEEP','EXERCISE') AND occurredAt>=:start AND occurredAt<:end)))) AND (:type='' OR type=:type OR (:type='HEALTH' AND category='HEALTH')) AND (:inbox=0 OR sourceType='NOTIFICATION') ORDER BY CASE WHEN :oldestFirst THEN CASE WHEN type='SLEEP' THEN endedAt ELSE occurredAt END END ASC, CASE WHEN NOT :oldestFirst THEN CASE WHEN type='SLEEP' THEN endedAt ELSE occurredAt END END DESC, CASE WHEN :oldestFirst THEN id END ASC, CASE WHEN NOT :oldestFirst THEN id END DESC LIMIT :limit")
+    @Query("SELECT * FROM life_event WHERE type!='BRIEFING' AND status NOT IN ('DELETED','DUPLICATE') AND ((calendarDate IS NOT NULL AND calendarDate=:date) OR (calendarDate IS NULL AND ((type='SLEEP' AND endedAt>=:start AND endedAt<:end) OR (type='EXERCISE' AND occurredAt<:end AND endedAt>:start) OR (type NOT IN ('SLEEP','EXERCISE') AND occurredAt>=:start AND occurredAt<:end)))) AND (:type='' OR type=:type OR (:type='HEALTH' AND category='HEALTH')) AND (:inbox=0 OR sourceType='NOTIFICATION') ORDER BY CASE WHEN :oldestFirst THEN CASE WHEN type='SLEEP' THEN endedAt ELSE occurredAt END END ASC, CASE WHEN NOT :oldestFirst THEN CASE WHEN type='SLEEP' THEN endedAt ELSE occurredAt END END DESC, CASE WHEN :oldestFirst THEN id END ASC, CASE WHEN NOT :oldestFirst THEN id END DESC LIMIT :limit")
     fun timeline(start: Long, end: Long, date: String, type: String, inbox: Boolean, limit: Int, oldestFirst: Boolean = false): Flow<List<LifeEvent>>
     @Query("SELECT * FROM life_event WHERE type NOT IN ('BRIEFING')") suspend fun allEvents(): List<LifeEvent>
     @Query("SELECT * FROM life_event WHERE sourceType=:source AND occurredAt>=:start AND occurredAt<:end AND (status='ACTIVE' OR (sourceType='CALENDAR' AND status IN ('DUPLICATE','CANCELLED')))")
     suspend fun sourceWindow(source: String, start: Long, end: Long): List<LifeEvent>
-    @Query("SELECT * FROM life_event WHERE type='BRIEFING' ORDER BY occurredAt DESC LIMIT 1") fun briefing(): Flow<LifeEvent?>
     @Query("SELECT * FROM daily_summary ORDER BY date DESC") fun observeSummaryRows(): Flow<List<DailySummary>>
     @Query("SELECT * FROM daily_summary WHERE updatedAt>0 ORDER BY date DESC") fun summaries(): Flow<List<DailySummary>>
     @Query("SELECT * FROM daily_summary WHERE updatedAt>0 ORDER BY date") suspend fun summariesOnce(): List<DailySummary>
@@ -53,6 +52,8 @@ interface LifeDao {
     suspend fun calendarForDay(start: Long, end: Long, date: String): List<LifeEvent>
     @Query("SELECT * FROM life_event WHERE type='CALENDAR' AND status='ACTIVE' AND ((calendarDate IS NOT NULL AND calendarDate=:date) OR (calendarDate IS NULL AND occurredAt>=:start AND occurredAt<:end)) ORDER BY CASE WHEN calendarDate IS NOT NULL THEN 0 ELSE 1 END, occurredAt,id")
     fun observeCalendarDay(start: Long, end: Long, date: String): Flow<List<LifeEvent>>
+    @Query("SELECT * FROM life_event WHERE status='ACTIVE' AND type IN ('PAYMENT','DELIVERY','RESERVATION') AND occurredAt>=:start AND occurredAt<:end ORDER BY occurredAt DESC,id DESC")
+    fun observeHomeNotifications(start: Long, end: Long): Flow<List<LifeEvent>>
     @Query("SELECT * FROM daily_summary ORDER BY date") suspend fun summaryRows(): List<DailySummary>
     @Upsert suspend fun putSummary(summary: DailySummary)
     @Query("DELETE FROM daily_summary") suspend fun clearSummaries()

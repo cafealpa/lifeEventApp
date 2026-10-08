@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 import org.junit.*
 import org.junit.Assert.*
@@ -23,19 +24,19 @@ class RefreshPolicyTest {
     @Before fun setup() { db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LifeDatabase::class.java).allowMainThreadQueries().build(); repo = LifeRepository(db) }
     @After fun close() { db.close() }
     private fun payload(text: String) = JSONObject().put("title", "알림").put("text", text)
-    private suspend fun derive() { repo.rebuildSummaries(zone,day); repo.generateBriefing(day,zone,time) }
+    private suspend fun derive() { repo.rebuildSummaries(zone,day) }
     @Test fun unrelatedNotificationsAndMetadataDoNotInvalidateButPaymentAmountDoes() = runBlocking {
         derive()
         repo.ingest("NOTIFICATION","ad",time,payload("(광고) 안내"))
         repo.ingest("NOTIFICATION","other",time,payload("일반 안내"))
-        assertFalse(repo.needsDerivation(zone,day,time))
+        assertFalse(repo.needsDerivation(zone,day))
         repo.ingest("NOTIFICATION","payment",time,payload("결제 완료 1000원"))
-        assertTrue(repo.needsDerivation(zone,day,time))
+        assertTrue(repo.needsDerivation(zone,day))
         derive()
         repo.ingest("NOTIFICATION","payment",time,payload("결제 완료 1000원\n추가 안내"))
-        assertFalse(repo.needsDerivation(zone,day,time))
+        assertFalse(repo.needsDerivation(zone,day))
         repo.ingest("NOTIFICATION","payment",time,payload("결제 완료 2000원"))
-        assertTrue(repo.needsDerivation(zone,day,time))
+        assertTrue(repo.needsDerivation(zone,day))
         derive()
         assertEquals(2000,db.dao().summariesOnce().first { it.date == day.toString() }.paymentAmount)
     }
@@ -43,17 +44,15 @@ class RefreshPolicyTest {
         val event=repo.ingest("NOTIFICATION","payment",time,payload("결제 완료 1000원"))
         derive()
         repo.classifyNotification(event.id,"ADVERTISEMENT")
-        assertTrue(repo.needsDerivation(zone,day,time))
+        assertTrue(repo.needsDerivation(zone,day))
         derive()
         assertEquals(0,db.dao().summariesOnce().first { it.date == day.toString() }.paymentCount)
-        assertFalse(repo.needsDerivation(zone,day,time))
+        assertFalse(repo.needsDerivation(zone,day))
     }
-    @Test fun missingBriefingNewDayAndTimezoneStillNeedDerivation() = runBlocking {
-        assertTrue(repo.needsDerivation(zone,day,time))
+    @Test fun missingSummaryNewDayAndTimezoneStillNeedDerivation() = runBlocking {
+        assertTrue(repo.needsDerivation(zone,day))
         repo.rebuildSummaries(zone,day)
-        assertTrue(repo.needsDerivation(zone,day,time))
-        repo.generateBriefing(day,zone,time)
-        assertFalse(repo.needsDerivation(zone,day,time))
+        assertFalse(repo.needsDerivation(zone,day))
         assertTrue(repo.needsDerivation(zone,day.plusDays(1)))
         assertTrue(repo.needsDerivation(ZoneId.of(if(zone.id == "UTC") "Asia/Seoul" else "UTC"),day))
     }
@@ -67,5 +66,12 @@ class RefreshPolicyTest {
         assertTrue(gate.shouldRefresh(2000,"2026-10-08","UTC"))
         gate.reset()
         assertTrue(gate.shouldRefresh(2000,"2026-10-08","Asia/Seoul"))
+    }
+    @Test fun oldBriefingIsPreservedButHiddenAndDoesNotRequireRegeneration() = runBlocking {
+        db.dao().put(LifeEvent("old-briefing","BRIEFING","LIFE",time,null,"이전 요약",null,"DERIVED","briefing:$day",null,"{}",createdAt=time,updatedAt=time))
+        repo.rebuildSummaries(zone,day)
+        assertNotNull(db.dao().eventById("old-briefing"))
+        assertTrue(db.dao().timeline(0,Long.MAX_VALUE,day.toString(),"",false,100).first().isEmpty())
+        assertFalse(repo.needsDerivation(zone,day))
     }
 }

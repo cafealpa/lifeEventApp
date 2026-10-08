@@ -72,7 +72,7 @@ class AppGraph(val context: Context) {
         aggregationState.value = true
         try {
             repository.rebuildSummaries()
-            repository.generateBriefing()
+
             status.success("PROCESSING")
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { status.set("PROCESSING", "집계 실패: ${e.javaClass.simpleName}"); throw e }
@@ -110,11 +110,6 @@ class AppGraph(val context: Context) {
     fun schedule() {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork("life-sync", ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<SyncWorker>(6, TimeUnit.HOURS).build())
-        val now = java.time.ZonedDateTime.now()
-        val nextMorning = now.toLocalDate().atTime(7, 0).atZone(now.zone).let { if (it.isAfter(now)) it else it.plusDays(1) }
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork("life-morning", ExistingPeriodicWorkPolicy.KEEP,
-            PeriodicWorkRequestBuilder<SyncWorker>(24, TimeUnit.HOURS)
-                .setInitialDelay(java.time.Duration.between(now, nextMorning).toMillis(), TimeUnit.MILLISECONDS).build())
     }
     suspend fun scheduleRefresh() {
         WorkManager.getInstance(context).enqueueUniqueWork("life-derive", ExistingWorkPolicy.REPLACE,
@@ -124,7 +119,7 @@ class AppGraph(val context: Context) {
 
 class LifeApplication : Application() {
     val graph by lazy { AppGraph(this) }
-    override fun onCreate() { super.onCreate(); graph.scheduleRetention(); if (graph.status.enabled()) graph.schedule() }
+    override fun onCreate() { super.onCreate(); WorkManager.getInstance(this).cancelUniqueWork("life-morning"); graph.scheduleRetention(); if (graph.status.enabled()) graph.schedule() }
 }
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {

@@ -26,7 +26,7 @@ class CalendarDuplicatesTest {
         .put("type", "CALENDAR").put("category", "SCHEDULE").put("title", title).put("summary", place).put("allDay", false).put("endedAt", end)
     private suspend fun visible() = db.dao().timeline(day.atStartOfDay(zone).toInstant().toEpochMilli(), day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), day.toString(), "CALENDAR", false, 100).first()
 
-    @Test fun duplicatesKeepRawButOnlyOneTimelineSummaryAndBriefingEntry() = runBlocking {
+    @Test fun duplicatesKeepRawButOnlyOneTimelineAndSummaryEntry() = runBlocking {
         val first = repo.ingest("CALENDAR", "1", start, payload())
         repo.ingest("CALENDAR", "2", start, payload("  팀   회의  "))
         repo.ingest("CALENDAR", "2", start, payload("  팀   회의  "))
@@ -34,8 +34,6 @@ class CalendarDuplicatesTest {
         assertEquals(listOf(first.id), visible().map { it.id })
         repo.rebuildSummaries(zone, day)
         assertEquals(1, db.dao().summariesOnce().first { it.date == day.toString() }.calendarCount)
-        repo.generateBriefing(day, zone, start - 1)
-        assertTrue(db.dao().briefing().first()!!.summary!!.contains("남은 일정: 1개"))
         repo.reprocess()
         assertEquals(1, visible().size)
         assertEquals(2, db.dao().rawCount())

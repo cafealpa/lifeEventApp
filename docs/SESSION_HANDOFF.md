@@ -416,3 +416,14 @@ AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 
 - 소스/main/tag 및 LifeDashboard.apk/update.json/SHA256SUMS.txt 게시. GitHub 조회로 draft=false/prerelease=false 및 세 자산 uploaded 확인.
 - APK 25,732,196 bytes, SHA-256 560c105ffa7a55bfa1fb385b1365f7c4911ec01fd73fc80f50b24113f656b727. GitHub 응답 digest와 로컬 값 일치. 사용자 요청으로 공개 APK 재다운로드 검증 생략.
 - 실제 단말 설치/권한 복귀/렌더링/백그라운드 검증은 미수행. 앞선 미배포 기록은 당시 상태이며 이번 릴리즈로 게시 완료했다.
+
+## 2026-10-08 — 홈 카드 통합 및 브리핑 제거
+
+- 사용자 요청으로 기존 홈 카드에 브리핑의 색상/숫자/세부 정보 표현을 적용했다. 결제/배송/예약은 개별 카드, 일정/건강은 기존 2열 구조다.
+- 브리핑 UI/생성/저장/아침 예약 제거. 이전 예약은 앱 시작 시 취소하며 기존 BRIEFING 데이터는 보존하고 타임라인에서 제외한다.
+- 홈 상세는 날짜 범위 Room Flow와 저장 집계를 사용한다. 일정 진행/다음 안내는 화면의 시간에 따라 계산한다. 기존 앱 연결/타임라인 이동 유지.
+- 버전은 0.6.0 유지, 이번 변경 공개 배포는 미수행. 자동 검증 결과는 아래 후속 기록에 남긴다.
+- [ ] API 35 이상에서 카드 렌더링/큰 글꼴/긴 제목/연결 앱 및 타임라인 이동을 확인한다.
+- [ ] 업그레이드 후 이전 아침 작업 취소와 브리핑 비노출을 단말에서 확인한다.
+
+- 최종 검증: `:app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug` 성공. 후속 추가 테스트 반영 후 `:app:testDebugUnitTest` 재실행 성공. 앱/계측 APK 빌드는 단말 실행 검증과 구분한다. lint 오류 0/경고 41, diff 검사 통과. 공개 배포는 미수행.
