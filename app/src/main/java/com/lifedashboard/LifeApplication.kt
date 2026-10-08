@@ -84,6 +84,10 @@ class AppGraph(val context: Context) {
         deriveInternal()
     }
     suspend fun reprocess() = syncMutex.withLock { repository.reprocess(); deriveInternal() }
+    suspend fun deleteNotification(id: String) = syncMutex.withLock {
+        notificationMutex.withLock { repository.deleteNotification(id) }
+        deriveInternal()
+    }
     suspend fun classifyNotification(id: String, type: String?, amount: Long?, cancelled: Boolean): LifeEvent = syncMutex.withLock {
         val event = repository.classifyNotification(id,type,amount,cancelled)
         deriveInternal()

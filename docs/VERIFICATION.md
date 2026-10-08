@@ -268,3 +268,7 @@ JDK 21에서 scripts/release.ps1 성공(Gradle 1분 16초). 단위 테스트/Rel
 ### v0.7.0 게시 결과
 
 79개 테스트 통과, Release lint 오류 0/경고 41. 소스 태그 b48c3d5 및 정식/latest v0.7.0 게시 완료. GitHub API 응답으로 공개 상태와 3개 자산 업로드 확인, APK digest 및 로컬 SHA-256 일치. 사용자 요청대로 재다운로드 검증은 미수행.
+
+## 2026-10-08 — 알림 개별 삭제 검증
+
+JDK 21에서 `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --console=plain` 성공(35초). NotificationDeletionTest 4개로 원본 전체 이력/태그/엔티티 삭제, 다른 알림 보존, 재분석 비복원, 결제 취소 삭제 후 순합계, 수동 분류별 삭제, Calendar 보호를 확인했다. diff 검사 통과. 실제 단말 UI/알림 재전달 경계 및 공개 배포는 미수행.

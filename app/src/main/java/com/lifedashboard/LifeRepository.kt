@@ -87,6 +87,18 @@ class LifeRepository(val db: LifeDatabase, rules: () -> ParserRuleSet = { Parser
         }
     }
 
+    suspend fun deleteNotification(id: String) = mutex.withLock {
+        db.withTransaction {
+            val event = dao.eventById(id) ?: return@withTransaction
+            require(event.sourceType == "NOTIFICATION") { "알림 기록만 삭제할 수 있어요" }
+            dao.deleteEvent(id)
+            event.sourceId?.let { dao.deleteNotificationRaws(it) }
+            if (changesSummary(event, null)) affectedDates(event, ZoneId.systemDefault()).forEach { date ->
+                dao.putSummary(DailySummary(date.toString(), null, null, null, 0, 0, 0, 0, 0, "{}", 0))
+            }
+        }
+    }
+
     suspend fun reprocess() = mutex.withLock { dao.latestRaws().forEach { normalize(it) } }
 
     suspend fun recoverPending(): Int = mutex.withLock {

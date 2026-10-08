@@ -89,6 +89,13 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
         val updated = graph.classifyNotification(id,type,amount,cancelled)
         if (detail.value?.event?.id == id) detail.value = EventDetail(updated, updated.rawEventId?.let { graph.repository.dao.raw(it) }, graph.repository.dao.tagsFor(id), graph.repository.dao.entitiesFor(id))
     }
+    fun deleteNotification(id: String) = work {
+        try { graph.deleteNotification(id) }
+        finally {
+            // Deletion may have succeeded even if the following summary refresh failed.
+            if (graph.repository.dao.eventById(id) == null && detail.value?.event?.id == id) detail.value = null
+        }
+    }
     fun filter(type: String = "", inbox: Boolean = false, date: LocalDate = LocalDate.now()) { query.value = TimelineQuery(date, type, inbox, oldestFirst = query.value.oldestFirst) }
 }
 
@@ -284,7 +291,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
             launchAfterPick = false
         }, onDismiss = { appPicker = null; launchAfterPick = false })
     }
-    detail?.let { EventDetailDialog(it, busy = busy, message = message, onClassify = { type, amount, cancelled -> vm.classify(it.event.id,type,amount,cancelled) }, onDismiss = { vm.detail.value = null }) }
+    detail?.let { EventDetailDialog(it, busy = busy, message = message, onClassify = { type, amount, cancelled -> vm.classify(it.event.id,type,amount,cancelled) }, onDelete = { vm.deleteNotification(it.event.id) }, onDismiss = { vm.detail.value = null }) }
     if (deleteConfirm) AlertDialog(onDismissRequest = { deleteConfirm = false }, title = { Text("저장된 데이터를 모두 삭제할까요?") }, text = { Text("이 앱의 원본·이벤트·집계를 삭제하고 수집을 중지해요. 원래 캘린더와 건강 앱의 데이터는 삭제하지 않아요.") }, confirmButton = { TextButton(onClick = { deleteConfirm = false; enabled = false; vm.work { vm.graph.clear() }; vm.detail.value = null }) { Text("삭제") } }, dismissButton = { TextButton(onClick = { deleteConfirm = false }) { Text("취소") } })
 }
 fun sourceLabel(source: String) = when (source) { "CALENDAR" -> "일정"; "HEALTH_CONNECT" -> "건강"; "NOTIFICATION" -> "알림"; else -> "집계" }

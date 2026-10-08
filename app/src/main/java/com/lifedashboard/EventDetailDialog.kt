@@ -26,8 +26,25 @@ import java.time.Instant
 import java.time.ZoneId
 
 @Composable
-fun EventDetailDialog(detail: EventDetail, busy: Boolean, message: String, onClassify: (String?, Long?, Boolean) -> Unit, onDismiss: () -> Unit) {
+fun EventDetailDialog(detail: EventDetail, busy: Boolean, message: String, onClassify: (String?, Long?, Boolean) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
     var editing by remember(detail.event) { mutableStateOf(false) }
+    var deleting by remember(detail.event.id) { mutableStateOf(false) }
+    if (deleting) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) deleting = false },
+            title = { Text("이 알림을 삭제할까요?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("이 앱에 저장된 알림과 원본 이력, 태그·관련 정보를 함께 삭제해요. 모든 분류 목록과 집계에서도 제외되며 되돌릴 수 없어요. 원래 앱이나 휴대폰 알림창의 알림은 삭제하지 않아요.")
+                    Text("다른 앱에서 같은 알림을 다시 보내면 새로 수집될 수 있어요.", style = MaterialTheme.typography.bodySmall)
+                    if (message.startsWith("처리 실패")) Text(message, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            confirmButton = { TextButton(onClick = onDelete, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(if (busy) "삭제 중…" else "삭제") } },
+            dismissButton = { TextButton(onClick = { deleting = false }, enabled = !busy) { Text("취소") } }
+        )
+        return
+    }
     val manual = remember(detail.event.dataJson) { JSONObject(detail.event.dataJson).has("manualClassification") }
     if (editing) {
         ClassificationDialog(detail.event, manual, busy, message, onClassify, onDismiss = { editing = false })
@@ -49,6 +66,7 @@ fun EventDetailDialog(detail: EventDetail, busy: Boolean, message: String, onCla
                         parsedData.optString("ruleWarning").takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     }
                     OutlinedButton(onClick = { editing = true }, enabled = !busy) { Text("분류 변경") }
+                    TextButton(onClick = { deleting = true }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("알림 삭제") }
                 }
                 TextButton(
                     onClick = { expanded = !expanded },
