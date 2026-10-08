@@ -1,5 +1,8 @@
 package com.lifedashboard
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -67,7 +70,22 @@ fun LifeIcon(kind: String, modifier: Modifier = Modifier, tint: Color = Teal) {
                 "SLEEP" -> { val p = Path().apply { moveTo(15f,3f); cubicTo(1f,0f,0f,21f,14f,21f); cubicTo(19f,21f,22f,17f,22f,14f); cubicTo(12f,18f,8f,9f,15f,3f) }; drawPath(p,tint,style=Stroke(1.7f)) }
                 "STEP", "STEP_SUMMARY", "HEALTH" -> { line(8f,4f,5f,10f,5f,14f,9f,14f,11f,9f,8f,4f); line(16f,10f,13f,16f,13f,20f,17f,20f,19f,15f,16f,10f) }
                 "EXERCISE" -> { line(3f,8f,3f,16f,7f,16f,7f,8f,3f,8f); line(17f,8f,17f,16f,21f,16f,21f,8f,17f,8f); line(7f,12f,17f,12f) }
-                "SETTINGS" -> { circle(12f,12f,7f); circle(12f,12f,2.5f); line(12f,2f,12f,5f); line(12f,19f,12f,22f); line(2f,12f,5f,12f); line(19f,12f,22f,12f) }
+                "ADVERTISEMENT" -> { line(3f,9f,9f,9f,19f,4f,19f,20f,9f,15f,3f,15f,3f,9f); line(7f,15f,9f,21f,12f,21f,10f,16f) }
+                "SETTINGS" -> {
+                    val gear = Path().apply {
+                        repeat(8) { tooth ->
+                            listOf(-22.5 to 7.5, -10.0 to 7.5, -10.0 to 10.0, 10.0 to 10.0, 10.0 to 7.5, 22.5 to 7.5).forEachIndexed { index, (offset, radius) ->
+                                val angle = Math.toRadians(tooth * 45.0 + offset)
+                                val x = 12f + (kotlin.math.cos(angle) * radius).toFloat()
+                                val y = 12f + (kotlin.math.sin(angle) * radius).toFloat()
+                                if (tooth == 0 && index == 0) moveTo(x, y) else lineTo(x, y)
+                            }
+                        }
+                        close()
+                    }
+                    drawPath(gear, tint, style = Stroke(1.5f, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                    circle(12f,12f,3f)
+                }
                 "NEXT" -> line(9f,5f,16f,12f,9f,19f)
                 "BACK" -> line(15f,5f,8f,12f,15f,19f)
                 "REFRESH" -> { line(20f,8f,17f,4f,9f,4f,4f,9f,4f,15f,9f,20f,16f,20f,20f,16f); line(20f,3f,20f,9f,14f,9f) }
@@ -125,7 +143,7 @@ private fun SummaryRow(type: String, title: String, subtitle: String, onClick: (
 }
 
 @Composable
-fun DashboardContent(summaries: List<DailySummary>, briefing: LifeEvent?, schedules: List<LifeEvent>, states: Map<String,String>, onSelect: (String, LocalDate) -> Unit, onInbox: () -> Unit, onOpen: (LifeEvent) -> Unit) {
+fun DashboardContent(summaries: List<DailySummary>, briefing: LifeEvent?, schedules: List<LifeEvent>, states: Map<String,String>, onLaunchApp: (String) -> Unit, onSelect: (String, LocalDate) -> Unit, onInbox: () -> Unit, onOpen: (LifeEvent) -> Unit) {
     val today = LocalDate.now()
     val current = summaries.find { it.date == today.toString() }
     val healthNote = if (states["HEALTH_CONNECT"]?.startsWith("수집 완료") == true) "저장된 건강 기록" else "최신 수집 미확인"
@@ -133,27 +151,18 @@ fun DashboardContent(summaries: List<DailySummary>, briefing: LifeEvent?, schedu
     val todayBriefing = briefing?.takeIf { Instant.ofEpochMilli(it.occurredAt).atZone(ZoneId.systemDefault()).toLocalDate() == today }
     LazyColumn(contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Card(onClick = { onSelect("BRIEFING",today) }, colors = CardDefaults.cardColors(containerColor = Mist)) {
-                Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    LifeIcon("BRIEFING", Modifier.size(32.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("오늘의 브리핑", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text(todayBriefing?.summary ?: "생활 기록이 모이면 하루 요약을 보여드려요.", style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                        Text("자세히 보기 ›", color = Teal, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
+            BriefingCard(todayBriefing)
+        }
+        item {
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatCard("오늘 일정", current?.let { "${it.calendarCount}개" } ?: "집계 대기", "CALENDAR", calendarNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("CALENDAR") }
+                StatCard("오늘 종료된 수면", current?.sleepMinutes?.let { "${it / 60}시간 ${it % 60}분" } ?: "기록 없음", "SLEEP", healthNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("SLEEP") }
             }
         }
         item {
             Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("오늘 일정", current?.let { "${it.calendarCount}개" } ?: "집계 대기", "CALENDAR", calendarNote, Modifier.weight(1f).fillMaxHeight()) { onSelect("CALENDAR",today) }
-                StatCard("오늘 종료된 수면", current?.sleepMinutes?.let { "${it / 60}시간 ${it % 60}분" } ?: "기록 없음", "SLEEP", healthNote, Modifier.weight(1f).fillMaxHeight()) { onSelect("SLEEP",today) }
-            }
-        }
-        item {
-            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("오늘 걸음수", current?.stepCount?.let { "${String.format(Locale.KOREAN,"%,d",it)}보" } ?: "기록 없음", "STEP_SUMMARY", healthNote, Modifier.weight(1f).fillMaxHeight()) { onSelect("STEP_SUMMARY",today) }
-                StatCard("오늘 운동", current?.exerciseMinutes?.let { "${it}분" } ?: "기록 없음", "EXERCISE", healthNote, Modifier.weight(1f).fillMaxHeight()) { onSelect("EXERCISE",today) }
+                StatCard("오늘 걸음수", current?.stepCount?.let { "${String.format(Locale.KOREAN,"%,d",it)}보" } ?: "기록 없음", "STEP_SUMMARY", healthNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("STEP_SUMMARY") }
+                StatCard("오늘 운동", current?.exerciseMinutes?.let { "${it}분" } ?: "기록 없음", "EXERCISE", healthNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("EXERCISE") }
             }
         }
         item {
@@ -172,19 +181,63 @@ fun DashboardContent(summaries: List<DailySummary>, briefing: LifeEvent?, schedu
             Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 SummaryRow("DELIVERY", "배송 알림", current?.let { "오늘 ${it.deliveryCount}건" } ?: "집계 대기") { onSelect("DELIVERY",today) }
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Paper)
-                SummaryRow("PAYMENT", "오늘 결제", current?.let { "${it.paymentCount}건 · ${String.format(Locale.KOREAN,"%,d",it.paymentAmount)}원 (취소 차감)" } ?: "집계 대기") { onSelect("PAYMENT",today) }
+                SummaryRow("PAYMENT", "오늘 결제", current?.let { "${it.paymentCount}건 · ${String.format(Locale.KOREAN,"%,d",it.paymentAmount)}원" } ?: "집계 대기") { onSelect("PAYMENT",today) }
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Paper)
                 SummaryRow("RESERVATION", "예약 알림", current?.let { "오늘 ${it.reservationCount}건" } ?: "집계 대기") { onSelect("RESERVATION",today) }
             }
         }
         item {
-            Text("수집 상태", style = MaterialTheme.typography.labelLarge, color = Muted)
-            states.forEach { (source,state) -> Text("${sourceLabel(source)} · $state", style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 4.dp)) }
-            current?.let { Text("집계 반영 ${Instant.ofEpochMilli(it.updatedAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("M/d HH:mm"))}", style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 8.dp)) }
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("수집 상태", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    states.entries.forEachIndexed { index, (source, state) ->
+                        if (index > 0) HorizontalDivider(color = Paper)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(sourceLabel(source), style = MaterialTheme.typography.labelLarge)
+                            Text(state, style = MaterialTheme.typography.bodySmall, color = Muted)
+                        }
+                    }
+                    current?.let {
+                        HorizontalDivider(color = Paper)
+                        Text("집계 반영 ${Instant.ofEpochMilli(it.updatedAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("M/d HH:mm"))}", style = MaterialTheme.typography.bodySmall, color = Muted)
+                    }
+                }
+            }
         }
     }
 }
 
+@Composable
+private fun BriefingCard(briefing: LifeEvent?) {
+    var expanded by rememberSaveable(briefing?.id) { mutableStateOf(false) }
+    val hasContent = !briefing?.summary.isNullOrBlank()
+    Card(
+        onClick = { expanded = !expanded },
+        enabled = hasContent,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Mist, disabledContainerColor = Mist, disabledContentColor = Ink)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().animateContentSize().heightIn(min = 180.dp).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LifeIcon("BRIEFING", Modifier.size(32.dp))
+                Text("오늘의 브리핑", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            }
+            Text(
+                briefing?.summary?.takeIf { it.isNotBlank() } ?: "생활 기록이 모이면 하루 요약을 보여드려요.",
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = if (expanded) Int.MAX_VALUE else 6,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (hasContent) TextButton(
+                onClick = { expanded = !expanded },
+                modifier = Modifier.align(Alignment.End).semantics { stateDescription = if (expanded) "펼쳐짐" else "접힘" }
+            ) { Text(if (expanded) "접기" else "자세히 보기") }
+        }
+    }
+}
 fun eventTime(event: LifeEvent): String = if (event.calendarDate != null) "종일" else Instant.ofEpochMilli(if (event.type == "SLEEP") event.endedAt ?: event.occurredAt else event.occurredAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
 
 private fun eventStatus(status: String) = when(status) { "ACTIVE" -> ""; "CANCELLED" -> "취소"; "UNVERIFIED" -> "확인 필요"; "NO_DATA" -> "데이터 없음"; else -> status }
@@ -197,7 +250,7 @@ fun TimelineContent(events: List<LifeEvent>, query: TimelineQuery, onQuery: (Tim
     LaunchedEffect(query.date,query.type,query.inbox) { listState.scrollToItem(0) }
     Column {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("" to "전체", "CALENDAR" to "일정", "HEALTH" to "건강", "PAYMENT" to "결제", "DELIVERY" to "배송", "RESERVATION" to "예약", "SLEEP" to "수면", "STEP_SUMMARY" to "걸음", "EXERCISE" to "운동", "NOTIFICATION" to "기타", "BRIEFING" to "브리핑").forEach { (type,label) ->
+            listOf("" to "전체", "CALENDAR" to "일정", "HEALTH" to "건강", "PAYMENT" to "결제", "DELIVERY" to "배송", "RESERVATION" to "예약", "ADVERTISEMENT" to "광고", "SLEEP" to "수면", "STEP_SUMMARY" to "걸음", "EXERCISE" to "운동", "NOTIFICATION" to "기타", "BRIEFING" to "브리핑").forEach { (type,label) ->
                 FilterChip(query.type == type, { onQuery(query.copy(type = type,limit = 100)) }, label = { Text(label) }, shape = RoundedCornerShape(50), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Teal, selectedLabelColor = Color.White))
             }
         }

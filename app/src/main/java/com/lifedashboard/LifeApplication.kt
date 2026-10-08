@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.work.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.TimeUnit
@@ -25,6 +26,8 @@ class CollectionStatus(context: Context) {
 class AppGraph(val context: Context) {
     val repository = LifeRepository(LifeDatabase.create(context))
     val status = CollectionStatus(context)
+    private val aggregationState = MutableStateFlow(false)
+    val aggregating = aggregationState.asStateFlow()
     val calendar = CalendarCollector(context, repository)
     val health = HealthCollector(context, repository)
     private val syncMutex = Mutex()
@@ -49,14 +52,21 @@ class AppGraph(val context: Context) {
     }
     suspend fun derive() = syncMutex.withLock { if (status.enabled()) deriveInternal() }
     private suspend fun deriveInternal() {
+        aggregationState.value = true
         try {
             repository.rebuildSummaries()
             repository.generateBriefing()
             status.success("PROCESSING")
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { status.set("PROCESSING", "집계 실패: ${e.javaClass.simpleName}"); throw e }
+        finally { aggregationState.value = false }
     }
     suspend fun reprocess() = syncMutex.withLock { repository.reprocess(); deriveInternal() }
+    suspend fun classifyNotification(id: String, type: String?, amount: Long?, cancelled: Boolean): LifeEvent = syncMutex.withLock {
+        val event = repository.classifyNotification(id,type,amount,cancelled)
+        deriveInternal()
+        event
+    }
     suspend fun acceptNotification(key: String, time: Long, payload: org.json.JSONObject) = notificationMutex.withLock {
         if (status.enabled()) {
             val before = repository.dao.event("NOTIFICATION", key)

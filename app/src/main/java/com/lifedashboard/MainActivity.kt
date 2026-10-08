@@ -49,7 +49,9 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
         val zone = ZoneId.systemDefault()
         graph.repository.dao.timeline(q.date.atStartOfDay(zone).toInstant().toEpochMilli(), q.date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), q.date.toString(), q.type, q.inbox, q.limit)
     }.reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val summaries = graph.repository.dao.summaries().reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val summaryState = graph.repository.dao.observeSummaryRows().reportReadFailure()
+        .runningFold(DashboardSummaryState()) { previous, rows -> previous.update(rows) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, DashboardSummaryState())
     val briefing = graph.repository.dao.briefing().reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     private val homeDate = MutableStateFlow(LocalDate.now())
     val schedules = homeDate.flatMapLatest { date ->
@@ -70,6 +72,10 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun refresh() { homeDate.value = LocalDate.now(); work { graph.refresh() } }
     fun open(event: LifeEvent) = work { detail.value = EventDetail(event, event.rawEventId?.let { graph.repository.dao.raw(it) }, graph.repository.dao.tagsFor(event.id), graph.repository.dao.entitiesFor(event.id)) }
+    fun classify(id: String, type: String?, amount: Long?, cancelled: Boolean) = work {
+        val updated = graph.classifyNotification(id,type,amount,cancelled)
+        if (detail.value?.event?.id == id) detail.value = EventDetail(updated, updated.rawEventId?.let { graph.repository.dao.raw(it) }, graph.repository.dao.tagsFor(id), graph.repository.dao.entitiesFor(id))
+    }
     fun filter(type: String = "", inbox: Boolean = false, date: LocalDate = LocalDate.now()) { query.value = TimelineQuery(date, type, inbox) }
 }
 
@@ -89,7 +95,9 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     val context = LocalContext.current
     val events by vm.events.collectAsStateWithLifecycle()
     val schedules by vm.schedules.collectAsStateWithLifecycle()
-    val summaries by vm.summaries.collectAsStateWithLifecycle()
+    val summaryState by vm.summaryState.collectAsStateWithLifecycle()
+    val summaries = summaryState.summaries
+    val aggregating by vm.graph.aggregating.collectAsStateWithLifecycle()
     val briefing by vm.briefing.collectAsStateWithLifecycle()
     val states by vm.graph.status.states.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
@@ -99,6 +107,10 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var enabled by remember { mutableStateOf(vm.graph.status.enabled()) }
     var deleteConfirm by remember { mutableStateOf(false) }
+    val appLinks = remember(context) { HomeAppLinks(context) }
+    var appLinkRevision by remember { mutableIntStateOf(0) }
+    var appPicker by rememberSaveable { mutableStateOf<String?>(null) }
+    var launchAfterPick by rememberSaveable { mutableStateOf(false) }
     var showUpdates by rememberSaveable { mutableStateOf(false) }
     if (showUpdates) { UpdateScreen(onBack = { showUpdates = false }); return }
     val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.refresh() }
@@ -123,6 +135,19 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                 Column(Modifier.weight(1f)) {
                     if(tab == 0) Text(LocalDate.now().format(DateTimeFormatter.ofPattern("M월 d일 EEEE", java.util.Locale.KOREAN)),style = MaterialTheme.typography.bodySmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(when(tab) { 0 -> "오늘 한눈에"; 1 -> "타임라인"; 2 -> "알림 보관함"; else -> "설정" }, style = MaterialTheme.typography.headlineSmall,fontWeight = FontWeight.Bold)
+                    if (tab == 0) {
+                        val failed = states["PROCESSING"]?.startsWith("집계 실패") == true && !aggregating
+                        if (summaryState.pending || aggregating || failed) {
+                            Surface(
+                                color = if (failed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = if (failed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                                shape = MaterialTheme.shapes.small,
+                                modifier = Modifier.padding(top = 6.dp)
+                            ) {
+                                Text(if (failed) "집계 실패 · 이전 값 유지" else "집계 중", Modifier.padding(horizontal = 10.dp,vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
                     if(tab == 1 || tab == 2) Text(if(tab == 1) "차곡차곡 쌓이는 나의 하루" else "수집한 알림과 분류 결과",style = MaterialTheme.typography.bodySmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 LifeIconButton("REFRESH","새로고침",enabled && !busy) { vm.refresh() }
@@ -139,10 +164,17 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                 }
             }
             when (tab) {
-                0 -> DashboardContent(summaries,briefing,schedules,states,onSelect = { type,date -> select(type,date) },onInbox = { vm.filter(inbox = true); tab = 2 },onOpen = vm::open)
+                0 -> DashboardContent(summaries,briefing,schedules,states,onLaunchApp = { type ->
+                    if (!appLinks.open(type)) {
+                        if (appLinks.selected(type) != null) vm.message.value = "연결한 앱을 열 수 없어요. 앱을 다시 선택해 주세요."
+                        launchAfterPick = true
+                        appPicker = type
+                    }
+                },onSelect = { type,date -> select(type,date) },onInbox = { vm.filter(inbox = true); tab = 2 },onOpen = vm::open)
                 1, 2 -> TimelineContent(events,query,onQuery = { vm.query.value = it },onOpen = vm::open)
                 3 -> Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { showUpdates = true }) { Text("앱 업데이트 · ${BuildConfig.VERSION_NAME}") }
+                    HomeAppLinkSettings(appLinks, appLinkRevision) { type -> launchAfterPick = false; appPicker = type }
                     Text("생활 데이터 이용 안내", style = MaterialTheme.typography.titleMedium); Text(PRIVACY)
                     Button(onClick = { enabled = !enabled; vm.graph.status.enable(enabled); if (enabled) { vm.graph.schedule(); vm.refresh() } }, enabled = !busy) { Text(if (enabled) "수집 중지" else "동의하고 수집 시작") }
                     Button(onClick = { calendarPermission.launch(Manifest.permission.READ_CALENDAR) }, enabled = enabled) { Text("일정 읽기 권한") }
@@ -160,7 +192,18 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
             }
         }
     }
-    detail?.let { EventDetailDialog(it, onDismiss = { vm.detail.value = null }) }
+    appPicker?.let { type ->
+        HomeAppPicker(type, appLinks, onChoose = { packageName ->
+            appLinks.select(type, packageName)
+            appLinkRevision++
+            appPicker = null
+            if (packageName != null && launchAfterPick && !appLinks.open(type)) {
+                vm.message.value = "선택한 앱을 열 수 없어요. 설정에서 다른 앱을 선택해 주세요."
+            }
+            launchAfterPick = false
+        }, onDismiss = { appPicker = null; launchAfterPick = false })
+    }
+    detail?.let { EventDetailDialog(it, busy = busy, message = message, onClassify = { type, amount, cancelled -> vm.classify(it.event.id,type,amount,cancelled) }, onDismiss = { vm.detail.value = null }) }
     if (deleteConfirm) AlertDialog(onDismissRequest = { deleteConfirm = false }, title = { Text("저장된 데이터를 모두 삭제할까요?") }, text = { Text("이 앱의 원본·이벤트·집계를 삭제하고 수집을 중지해요. 원래 캘린더와 건강 앱의 데이터는 삭제하지 않아요.") }, confirmButton = { TextButton(onClick = { deleteConfirm = false; enabled = false; vm.work { vm.graph.clear() }; vm.detail.value = null }) { Text("삭제") } }, dismissButton = { TextButton(onClick = { deleteConfirm = false }) { Text("취소") } })
 }
 fun sourceLabel(source: String) = when (source) { "CALENDAR" -> "일정"; "HEALTH_CONNECT" -> "건강"; "NOTIFICATION" -> "알림"; else -> "집계/브리핑" }

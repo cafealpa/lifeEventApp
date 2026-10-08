@@ -176,3 +176,39 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 - 공개 latest 릴리즈 v0.3.1, 인증 없는 APK 재다운로드 및 크기/metadata/GitHub digest/SHA-256 일치. 공개 SHA256SUMS.txt 추가 대조 통과.
 - APK 25,420,760 bytes; SHA-256 `fc129392c17f85eb3400b78d433d188e0ee6dbd118c193aba50c8e0dc07610e6`.
 - 소스 태그 31f725f. 폰 설치·업데이트·실제 알림 원문 대조는 미수행.
+
+## 2026-10-07 — 광고 알림 분류 검증
+
+- `./gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain`: BUILD SUCCESSFUL.
+- 단위/Room 테스트 47개 통과. 광고 접두사 우선 판별, 제목/중간/다른 표기 제외, 그룹·상시 광고 분류 검증.
+- 기존 PAYMENT(v2)를 ADVERTISEMENT(v3)로 재분석하고 결제 집계 제외, 광고 보관함 필터 조회, 낮은 중요도, 원본/이벤트 ID 보존, 중복 방지를 검증했다.
+- lint 오류 0/경고 37, diff 공백 검사 통과. Debug APK 갱신. 실기기 UI/수집 검증 및 공개 배포는 미수행.
+
+## 2026-10-07 — 제목 광고 분류 확장 검증
+
+- `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug --console=plain`: BUILD SUCCESSFUL, 테스트 47개 통과.
+- 제목만/본문만/둘 다 접두사 일치, 빈 본문, 그룹 알림, 제목 중간 일치와 앞 공백 제외 검증.
+- 이전 v3 제목 광고 결제를 v4 광고로 재분류해 원본·ID 유지, 광고 필터 조회와 결제 합계 제외 검증.
+- Debug APK 갱신. 실기기/공개 배포 미수행. 이번 작은 조건 변경에서는 lint를 재실행하지 않았으며 직전 광고 구현의 lint 통과 기록과 구분한다.
+
+## 2026-10-08 — 알림 수동 분류 검증
+
+- `:app:assembleDebug`, `:app:testDebugUnitTest :app:lintDebug --console=plain`: BUILD SUCCESSFUL.
+- 전체 테스트 50개 통과. 새 Room 통합 테스트 3개: 수동 선택 재처리/파서 버전 복구/원문 갱신 유지 및 자동 복원, 결제 승인·취소와 각 분류 이동의 집계/필터 반영, 금액 누락·음수·미지원 유형·비알림 변경 거절과 원래 데이터 보존.
+- 원문/ID 유지, 중복 없음, repository 재생성 이후 선택 유지 확인. DB schema v1 유지.
+- lint 오류 0, 경고 37. diff 공백 검사 통과. Debug APK 갱신.
+- API 35 이상 실제 단말의 분류 선택 UI/원문 수집/설치 검증과 공개 릴리즈는 미수행.
+
+## 2026-10-08 — 집계 중 표시값 유지 검증
+
+- `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain`: BUILD SUCCESSFUL.
+- 전체 테스트 54개 통과. 새 4개 테스트: dirty 상태 반복 시 이전 값 유지/완료 후 교체, 최초 미집계와 날짜 분리, 전체 삭제 후 캐시 제거/재등장 방지, 정상 0값 반영과 삭제 날짜 제거.
+- lint 오류 0/경고 37, diff 공백 검사 통과. Debug APK 갱신.
+- 실제 단말 연속 수집 중 배지와 화면 갱신, 공개 릴리즈는 미수행. 저장값 계산 및 DB 스키마 변경 없음.
+
+## 2026-10-08 — v0.4.0 배포 전 검증
+
+- `scripts/release.ps1`: testDebugUnitTest 57개 통과(실패/오류 0), lintRelease 오류 0/경고 38, assembleRelease 성공.
+- 신규 경고는 HomeAppLinks의 SharedPreferences.edit KTX 사용 제안이며 기능 오류가 아니다.
+- 기존 고정 인증서 SHA-256 일치, 패키지 com.lifedashboard/versionCode 5/versionName 0.4.0 및 non-debuggable 검사 통과.
+- `git diff --check` 통과. 실제 API 35 이상 단말 설치/외부 앱 실행/화면 동작은 미검증.

@@ -165,4 +165,92 @@ class RepositoryTest {
         repo.rebuildSummaries(zone,day)
         assertEquals(0L,db.dao().summariesOnce().first { it.date == day.toString() }.paymentAmount)
     }
+    @Test fun advertisingRecoveryRemovesOldPaymentFromTotalsAndFiltersInbox() = runBlocking<Unit> {
+        val zone = ZoneId.systemDefault()
+        val day = LocalDate.of(2026,10,7)
+        val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        val payload = JSONObject().put("title","(광고) 테스트 알림").put("text","결제 완료 5,900원")
+        val original = repo.ingest("NOTIFICATION","ad",start + 1000,payload)
+        db.dao().put(original.copy(type = "PAYMENT", category = "FINANCE",
+            dataJson = JSONObject().put("parserVersion",3).put("amount",5900).put("currency","KRW").put("paymentKind","APPROVAL").toString()))
+        repo.rebuildSummaries(zone,day)
+        assertEquals(5900L,db.dao().summariesOnce().first { it.date == day.toString() }.paymentAmount)
+        assertEquals(0,repo.recoverPending())
+        repo.rebuildSummaries(zone,day)
+        val ads = db.dao().timeline(start,start + 86_400_000,day.toString(),"ADVERTISEMENT",true,100).first()
+        assertEquals(listOf(original.id),ads.map { it.id })
+        assertEquals(original.rawEventId,ads.single().rawEventId)
+        assertEquals(0.2,ads.single().importance,0.0)
+        assertEquals(listOf("광고"),db.dao().tagsFor(original.id).map { it.tag })
+        assertTrue(db.dao().timeline(start,start + 86_400_000,day.toString(),"PAYMENT",true,100).first().isEmpty())
+        assertEquals(0L,db.dao().summariesOnce().first { it.date == day.toString() }.paymentAmount)
+        assertEquals(0,db.dao().summariesOnce().first { it.date == day.toString() }.paymentCount)
+        repo.recoverPending()
+        assertEquals(1,db.dao().rawCount())
+        assertEquals(1,db.dao().allEvents().size)
+    }
+    @Test fun manualClassificationSurvivesReprocessingAndRawUpdatesThenCanReset() = runBlocking<Unit> {
+        val time = LocalDate.now().atTime(10,0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val payload = JSONObject().put("title","(광고) 테스트").put("text","테스트 기록")
+        val original = repo.ingest("NOTIFICATION","manual",time,payload)
+        val changed = repo.classifyNotification(original.id,"DELIVERY")
+        assertEquals(original.id,changed.id)
+        assertEquals(original.rawEventId,changed.rawEventId)
+        assertEquals("DELIVERY",changed.type)
+        assertEquals("LIFE",changed.category)
+        assertEquals(listOf("배송"),db.dao().tagsFor(changed.id).map { it.tag })
+        assertEquals(1,db.dao().rawCount())
+        val reopened = LifeRepository(db)
+        reopened.reprocess()
+        assertEquals("DELIVERY",db.dao().eventById(changed.id)?.type)
+        val updated = reopened.ingest("NOTIFICATION","manual",time,JSONObject(payload.toString()).put("text","변경된 본문"))
+        assertEquals("DELIVERY",updated.type)
+        assertEquals("변경된 본문",updated.summary)
+        val data = JSONObject(updated.dataJson).put("parserVersion",0)
+        db.dao().put(updated.copy(dataJson = data.toString()))
+        assertEquals(0,reopened.recoverPending())
+        assertEquals("DELIVERY",db.dao().eventById(changed.id)?.type)
+        val reset = reopened.classifyNotification(changed.id,null)
+        assertEquals("ADVERTISEMENT",reset.type)
+        assertFalse(JSONObject(reset.dataJson).has("manualClassification"))
+        assertEquals(updated.rawEventId,reset.rawEventId)
+        assertEquals(2,db.dao().rawCount())
+        assertEquals(1,db.dao().allEvents().size)
+    }
+    @Test fun manualPaymentAndCategoryMovesUpdateTotalsAndFilters() = runBlocking<Unit> {
+        val zone = ZoneId.systemDefault()
+        val day = LocalDate.now(zone)
+        val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        val original = repo.ingest("NOTIFICATION","manual",start + 1000,JSONObject().put("title","테스트").put("text","확인할 기록"))
+        repo.classifyNotification(original.id,"PAYMENT",7000)
+        repo.rebuildSummaries(zone,day)
+        assertEquals(7000L,db.dao().summariesOnce().first { it.date == day.toString() }.paymentAmount)
+        repo.classifyNotification(original.id,"PAYMENT",2000,true)
+        repo.reprocess()
+        repo.rebuildSummaries(zone,day)
+        assertEquals(-2000L,db.dao().summariesOnce().first { it.date == day.toString() }.paymentAmount)
+        for (type in listOf("DELIVERY","RESERVATION","ADVERTISEMENT","NOTIFICATION")) {
+            repo.classifyNotification(original.id,type)
+            repo.rebuildSummaries(zone,day)
+            val summary = db.dao().summariesOnce().first { it.date == day.toString() }
+            assertEquals(0L,summary.paymentAmount)
+            assertEquals(0,summary.paymentCount)
+            assertEquals(if (type == "DELIVERY") 1 else 0,summary.deliveryCount)
+            assertEquals(if (type == "RESERVATION") 1 else 0,summary.reservationCount)
+            assertEquals(listOf(original.id),db.dao().timeline(start,start + 86_400_000,day.toString(),type,true,100).first().map { it.id })
+        }
+        assertEquals(1,db.dao().rawCount())
+    }
+    @Test fun invalidManualClassificationLeavesDataUnchanged() = runBlocking<Unit> {
+        val original = repo.ingest("NOTIFICATION","invalid",100,JSONObject().put("title","테스트").put("text","본문"))
+        for (type in listOf("CALENDAR","PAYMENT")) {
+            try { repo.classifyNotification(original.id,type); fail("invalid change must fail") } catch (_: IllegalArgumentException) { }
+            assertEquals(original,db.dao().eventById(original.id))
+        }
+        try { repo.classifyNotification(original.id,"PAYMENT",-1); fail("negative amount must fail") } catch (_: IllegalArgumentException) { }
+        assertEquals(original,db.dao().eventById(original.id))
+        val calendar = repo.ingest("CALENDAR","calendar",100,JSONObject().put("type","CALENDAR").put("title","일정"))
+        try { repo.classifyNotification(calendar.id,"ADVERTISEMENT"); fail("only notifications") } catch (_: IllegalArgumentException) { }
+        assertEquals(calendar,db.dao().eventById(calendar.id))
+    }
 }

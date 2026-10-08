@@ -26,14 +26,15 @@ class LifeRepository(val db: LifeDatabase) {
     private suspend fun normalize(raw: RawEvent): LifeEvent {
         val json = JSONObject(raw.rawJson)
         val normalizedData = JSONObject(raw.rawJson).also { it.remove("raw") }
-        val parsed = if (raw.sourceType == "NOTIFICATION") parser.parse(raw).single() else ParsedEvent(
+        val automatic = if (raw.sourceType == "NOTIFICATION") parser.parse(raw).single() else ParsedEvent(
             json.getString("type"), json.optString("category", "HEALTH"), json.getString("title"), json.optString("summary"),
             normalizedData, json.optString("status", "ACTIVE"))
         val old = dao.event(raw.sourceType, raw.sourceKey)
+        val parsed = if (raw.sourceType == "NOTIFICATION") applyManualClassification(automatic, json, old?.let { JSONObject(it.dataJson).optJSONObject("manualClassification") }) else automatic
         val now = System.currentTimeMillis()
         val event = LifeEvent(old?.id ?: UUID.randomUUID().toString(), parsed.type, parsed.category, raw.occurredAt,
             if (json.has("endedAt")) json.getLong("endedAt") else null, parsed.title, parsed.summary,
-            raw.sourceType, raw.sourceKey, raw.id, parsed.data.toString(), if (parsed.type == "NOTIFICATION") 0.2 else 0.5,
+            raw.sourceType, raw.sourceKey, raw.id, parsed.data.toString(), if (parsed.type in setOf("NOTIFICATION", "ADVERTISEMENT")) 0.2 else 0.5,
             old?.createdAt ?: now, now, parsed.status, if (parsed.type == "CALENDAR" && json.optBoolean("allDay")) json.optString("date") else null)
         db.withTransaction {
             dao.put(event)
@@ -47,6 +48,26 @@ class LifeRepository(val db: LifeDatabase) {
             }
         }
         return event
+    }
+
+    suspend fun classifyNotification(id: String, type: String?, amount: Long? = null, cancelled: Boolean = false): LifeEvent = mutex.withLock {
+        db.withTransaction {
+            val event = requireNotNull(dao.eventById(id)) { "알림을 찾을 수 없어요" }
+            require(event.sourceType == "NOTIFICATION") { "알림만 분류를 변경할 수 있어요" }
+            val raw = requireNotNull(dao.latestRaw(event.sourceType, requireNotNull(event.sourceId)))
+            val data = JSONObject(event.dataJson)
+            if (type == null) data.remove("manualClassification") else {
+                require(type in notificationClassifications) { "지원하지 않는 분류예요" }
+                val choice = JSONObject().put("type",type).put("changedAt",System.currentTimeMillis())
+                if (type == "PAYMENT") {
+                    require(amount != null && amount > 0) { "결제 금액을 확인해 주세요" }
+                    choice.put("amount",amount).put("paymentKind",if (cancelled) "CANCELLATION" else "APPROVAL")
+                }
+                data.put("manualClassification",choice)
+            }
+            dao.put(event.copy(dataJson = data.toString()))
+            normalize(raw)
+        }
     }
 
     suspend fun reprocess() = mutex.withLock { dao.latestRaws().forEach { normalize(it) } }

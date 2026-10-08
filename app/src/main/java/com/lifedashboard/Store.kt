@@ -40,6 +40,7 @@ interface LifeDao {
     @Query("SELECT * FROM life_event WHERE sourceType=:source AND occurredAt>=:start AND occurredAt<:end AND status='ACTIVE'")
     suspend fun sourceWindow(source: String, start: Long, end: Long): List<LifeEvent>
     @Query("SELECT * FROM life_event WHERE type='BRIEFING' ORDER BY occurredAt DESC LIMIT 1") fun briefing(): Flow<LifeEvent?>
+    @Query("SELECT * FROM daily_summary ORDER BY date DESC") fun observeSummaryRows(): Flow<List<DailySummary>>
     @Query("SELECT * FROM daily_summary WHERE updatedAt>0 ORDER BY date DESC") fun summaries(): Flow<List<DailySummary>>
     @Query("SELECT * FROM daily_summary WHERE updatedAt>0 ORDER BY date") suspend fun summariesOnce(): List<DailySummary>
     @Query("SELECT * FROM life_event WHERE status='ACTIVE' AND type!='BRIEFING' AND ((type='EXERCISE' AND occurredAt<:end AND endedAt>:start) OR json_extract(dataJson,'$.date')=:date OR (json_extract(dataJson,'$.date') IS NULL AND ((type='SLEEP' AND endedAt>=:start AND endedAt<:end) OR (type!='SLEEP' AND occurredAt>=:start AND occurredAt<:end))))")

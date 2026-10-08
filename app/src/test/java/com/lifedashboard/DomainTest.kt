@@ -9,6 +9,32 @@ class DomainTest {
     private fun parse(text: String, title: String = "알림", grouped: Boolean = false) = NotificationParser().parse(RawEvent("r", "NOTIFICATION", "n", 1, 0, 0,
         JSONObject().put("title", title).put("text", text).put("groupSummary", grouped).toString(), "")).single()
 
+    @Test fun advertisingBodyPrefixTakesPriorityOverOtherClassifications() {
+        listOf("(광고) 결제 완료 5,900원", "(광고) 배송 완료", "(광고) 예약 확정").forEach { body ->
+            val result = parse(body)
+            assertEquals("ADVERTISEMENT",result.type)
+            assertEquals("ADVERTISEMENT",result.category)
+            assertEquals(body,result.summary)
+            assertEquals(listOf("광고"),result.tags)
+            assertFalse(result.data.has("amount"))
+        }
+        assertEquals("ADVERTISEMENT",parse("(광고) 안내",grouped = true).type)
+        val ongoing = RawEvent("r","NOTIFICATION","n",1,0,0,
+            JSONObject().put("text","(광고) 안내").put("ongoing",true).toString(),"")
+        assertEquals("ADVERTISEMENT",NotificationParser().parse(ongoing).single().type)
+    }
+    @Test fun advertisementRequiresExactTitleOrBodyPrefix() {
+        assertEquals("ADVERTISEMENT",parse("결제 완료 5,900원",title = "(광고) 제목").type)
+        assertEquals("ADVERTISEMENT",parse("",title = "(광고) 제목").type)
+        assertEquals("ADVERTISEMENT",parse("(광고) 본문",title = "(광고) 제목").type)
+        assertEquals("ADVERTISEMENT",parse("안내",title = "(광고) 제목",grouped = true).type)
+        assertEquals("PAYMENT",parse("결제 완료 5,900원",title = "안내 (광고)").type)
+        assertEquals("NOTIFICATION",parse("안내",title = " (광고) 제목").type)
+        listOf("안내 (광고) 내용", " (광고) 내용", "", "[광고] 내용").forEach { body ->
+            assertEquals("NOTIFICATION",parse(body).type)
+        }
+    }
+
     @Test fun paymentExcludesBalanceAndExtractsMerchant() {
         val p = parse("현대카드 승인 5,900원\n가맹점: 테스트카페\n잔액 50,000원")
         assertEquals("PAYMENT", p.type); assertEquals(5900L, p.data.getLong("amount")); assertEquals("테스트카페", p.data.getString("merchant"))

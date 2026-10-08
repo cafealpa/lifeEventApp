@@ -14,6 +14,10 @@ class NotificationParser : EventParser {
         val body = json.optString("text")
         val text = "$title\n$body"
         val data = JSONObject().put("schemaVersion", 1).put("parserVersion", VERSION).put("package", json.optString("package"))
+        if (title.startsWith("(광고)") || body.startsWith("(광고)")) {
+            if (json.optBoolean("groupSummary") || json.optBoolean("ongoing")) data.put("suppressed", true)
+            return listOf(ParsedEvent("ADVERTISEMENT", "ADVERTISEMENT", title.ifBlank { "광고 알림" }, body, data, tags = listOf("광고")))
+        }
         if (json.optBoolean("groupSummary") || json.optBoolean("ongoing")) {
             return listOf(ParsedEvent("NOTIFICATION", "COMMUNICATION", title.ifBlank { "알림" }, body, data.put("suppressed", true)))
         }
@@ -80,5 +84,5 @@ class NotificationParser : EventParser {
         return ParsedEvent("PAYMENT", "FINANCE", merchant, "${if (cancelled) "취소" else "승인"} ${amount}원", data,
             tags = listOf("결제", "지역화폐"), entities = mapOf("COMPANY" to merchant))
     }
-    companion object { const val VERSION = 2 }
+    companion object { const val VERSION = 4 }
 }
