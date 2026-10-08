@@ -34,7 +34,7 @@ import kotlinx.coroutines.flow.*
 import java.time.*
 import java.time.format.DateTimeFormatter
 
-data class TimelineQuery(val date: LocalDate = LocalDate.now(), val type: String = "", val inbox: Boolean = false, val limit: Int = 100)
+data class TimelineQuery(val date: LocalDate = LocalDate.now(), val type: String = "", val inbox: Boolean = false, val limit: Int = 100, val oldestFirst: Boolean = false)
 data class EventDetail(val event: LifeEvent, val raw: RawEvent?, val tags: List<EventTag>, val entities: List<EventEntity>)
 @OptIn(ExperimentalCoroutinesApi::class)
 class LifeViewModel(app: Application) : AndroidViewModel(app) {
@@ -47,7 +47,7 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
     val query = MutableStateFlow(TimelineQuery())
     val events = query.flatMapLatest { q ->
         val zone = ZoneId.systemDefault()
-        graph.repository.dao.timeline(q.date.atStartOfDay(zone).toInstant().toEpochMilli(), q.date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), q.date.toString(), q.type, q.inbox, q.limit)
+        graph.repository.dao.timeline(q.date.atStartOfDay(zone).toInstant().toEpochMilli(), q.date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), q.date.toString(), q.type, q.inbox, q.limit, q.oldestFirst)
     }.reportReadFailure().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val summaryState = graph.repository.dao.observeSummaryRows().reportReadFailure()
         .runningFold(DashboardSummaryState()) { previous, rows -> previous.update(rows) }
@@ -70,13 +70,13 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
             finally { busy.value = false }
         }
     }
-    fun refresh() { homeDate.value = LocalDate.now(); work { graph.refresh() } }
+    fun refresh(force: Boolean = true) { homeDate.value = LocalDate.now(); work { graph.refresh(force = force) } }
     fun open(event: LifeEvent) = work { detail.value = EventDetail(event, event.rawEventId?.let { graph.repository.dao.raw(it) }, graph.repository.dao.tagsFor(event.id), graph.repository.dao.entitiesFor(event.id)) }
     fun classify(id: String, type: String?, amount: Long?, cancelled: Boolean) = work {
         val updated = graph.classifyNotification(id,type,amount,cancelled)
         if (detail.value?.event?.id == id) detail.value = EventDetail(updated, updated.rawEventId?.let { graph.repository.dao.raw(it) }, graph.repository.dao.tagsFor(id), graph.repository.dao.entitiesFor(id))
     }
-    fun filter(type: String = "", inbox: Boolean = false, date: LocalDate = LocalDate.now()) { query.value = TimelineQuery(date, type, inbox) }
+    fun filter(type: String = "", inbox: Boolean = false, date: LocalDate = LocalDate.now()) { query.value = TimelineQuery(date, type, inbox, oldestFirst = query.value.oldestFirst) }
 }
 
 class MainActivity : ComponentActivity() {
@@ -98,6 +98,11 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     val summaryState by vm.summaryState.collectAsStateWithLifecycle()
     val summaries = summaryState.summaries
     val aggregating by vm.graph.aggregating.collectAsStateWithLifecycle()
+    var showAggregationBadge by remember { mutableStateOf(false) }
+    LaunchedEffect(summaryState.pending, aggregating) {
+        if (summaryState.pending || aggregating) { delay(700); showAggregationBadge = true }
+        else showAggregationBadge = false
+    }
     val briefing by vm.briefing.collectAsStateWithLifecycle()
     val states by vm.graph.status.states.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
@@ -111,12 +116,14 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     var appLinkRevision by remember { mutableIntStateOf(0) }
     var appPicker by rememberSaveable { mutableStateOf<String?>(null) }
     var launchAfterPick by rememberSaveable { mutableStateOf(false) }
+    var showParserRules by rememberSaveable { mutableStateOf(false) }
+    if (showParserRules) { ParserRulesScreen(vm) { showParserRules = false }; return }
     var showUpdates by rememberSaveable { mutableStateOf(false) }
     if (showUpdates) { UpdateScreen(onBack = { showUpdates = false }); return }
     val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.refresh() }
     val healthPermissions = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { vm.refresh() }
     LifecycleResumeEffect(Unit) {
-        if (vm.graph.status.enabled()) vm.refresh()
+        vm.refresh(force = false)
         onPauseOrDispose { }
     }
     fun select(type: String, date: LocalDate = LocalDate.now()) { vm.filter(type, date = date); tab = 1 }
@@ -137,7 +144,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                     Text(when(tab) { 0 -> "오늘 한눈에"; 1 -> "타임라인"; 2 -> "알림 보관함"; else -> "설정" }, style = MaterialTheme.typography.headlineSmall,fontWeight = FontWeight.Bold)
                     if (tab == 0) {
                         val failed = states["PROCESSING"]?.startsWith("집계 실패") == true && !aggregating
-                        if (summaryState.pending || aggregating || failed) {
+                        if (showAggregationBadge || failed) {
                             Surface(
                                 color = if (failed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = if (failed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
@@ -174,7 +181,9 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                 1, 2 -> TimelineContent(events,query,onQuery = { vm.query.value = it },onOpen = vm::open)
                 3 -> Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { showUpdates = true }) { Text("앱 업데이트 · ${BuildConfig.VERSION_NAME}") }
+                    OutlinedButton(onClick = { showParserRules = true }, enabled = !busy) { Text("알림 파서 규칙") }
                     HomeAppLinkSettings(appLinks, appLinkRevision) { type -> launchAfterPick = false; appPicker = type }
+                    Text("자동 삭제: 알림 발생 시각부터 광고 14일 · 기타 30일. 원본도 함께 삭제해요. 앱을 열거나 약 6시간마다 정리하며, 수집 중지 중에도 적용돼요.", style = MaterialTheme.typography.bodySmall)
                     Text("생활 데이터 이용 안내", style = MaterialTheme.typography.titleMedium); Text(PRIVACY)
                     Button(onClick = { enabled = !enabled; vm.graph.status.enable(enabled); if (enabled) { vm.graph.schedule(); vm.refresh() } }, enabled = !busy) { Text(if (enabled) "수집 중지" else "동의하고 수집 시작") }
                     Button(onClick = { calendarPermission.launch(Manifest.permission.READ_CALENDAR) }, enabled = enabled) { Text("일정 읽기 권한") }

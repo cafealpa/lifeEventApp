@@ -33,11 +33,15 @@ interface LifeDao {
     suspend fun latestRaws(): List<RawEvent>
     @Query("SELECT * FROM life_event WHERE sourceType=:source AND sourceId=:key") suspend fun event(source: String, key: String): LifeEvent?
     @Query("SELECT * FROM life_event WHERE id=:id") suspend fun eventById(id: String): LifeEvent?
+    @Query("SELECT * FROM life_event WHERE sourceType='CALENDAR' AND type='CALENDAR' AND status IN ('ACTIVE','DUPLICATE')")
+    suspend fun calendarDuplicateCandidates(): List<LifeEvent>
+    @Query("SELECT * FROM life_event WHERE sourceType='CALENDAR' AND type='CALENDAR' AND status IN ('ACTIVE','DUPLICATE') AND (occurredAt IN (:times) OR calendarDate IN (:dates))")
+    suspend fun calendarDuplicateCandidates(times: List<Long>, dates: List<String>): List<LifeEvent>
     @Upsert suspend fun put(event: LifeEvent)
-    @Query("SELECT * FROM life_event WHERE status != 'DELETED' AND ((calendarDate IS NOT NULL AND calendarDate=:date) OR (calendarDate IS NULL AND ((type='SLEEP' AND endedAt>=:start AND endedAt<:end) OR (type='EXERCISE' AND occurredAt<:end AND endedAt>:start) OR (type NOT IN ('SLEEP','EXERCISE') AND occurredAt>=:start AND occurredAt<:end)))) AND (:type='' OR type=:type OR (:type='HEALTH' AND category='HEALTH')) AND (:inbox=0 OR sourceType='NOTIFICATION') ORDER BY CASE WHEN type='SLEEP' THEN endedAt ELSE occurredAt END DESC,id DESC LIMIT :limit")
-    fun timeline(start: Long, end: Long, date: String, type: String, inbox: Boolean, limit: Int): Flow<List<LifeEvent>>
+    @Query("SELECT * FROM life_event WHERE status NOT IN ('DELETED','DUPLICATE') AND ((calendarDate IS NOT NULL AND calendarDate=:date) OR (calendarDate IS NULL AND ((type='SLEEP' AND endedAt>=:start AND endedAt<:end) OR (type='EXERCISE' AND occurredAt<:end AND endedAt>:start) OR (type NOT IN ('SLEEP','EXERCISE') AND occurredAt>=:start AND occurredAt<:end)))) AND (:type='' OR type=:type OR (:type='HEALTH' AND category='HEALTH')) AND (:inbox=0 OR sourceType='NOTIFICATION') ORDER BY CASE WHEN :oldestFirst THEN CASE WHEN type='SLEEP' THEN endedAt ELSE occurredAt END END ASC, CASE WHEN NOT :oldestFirst THEN CASE WHEN type='SLEEP' THEN endedAt ELSE occurredAt END END DESC, CASE WHEN :oldestFirst THEN id END ASC, CASE WHEN NOT :oldestFirst THEN id END DESC LIMIT :limit")
+    fun timeline(start: Long, end: Long, date: String, type: String, inbox: Boolean, limit: Int, oldestFirst: Boolean = false): Flow<List<LifeEvent>>
     @Query("SELECT * FROM life_event WHERE type NOT IN ('BRIEFING')") suspend fun allEvents(): List<LifeEvent>
-    @Query("SELECT * FROM life_event WHERE sourceType=:source AND occurredAt>=:start AND occurredAt<:end AND status='ACTIVE'")
+    @Query("SELECT * FROM life_event WHERE sourceType=:source AND occurredAt>=:start AND occurredAt<:end AND (status='ACTIVE' OR (sourceType='CALENDAR' AND status IN ('DUPLICATE','CANCELLED')))")
     suspend fun sourceWindow(source: String, start: Long, end: Long): List<LifeEvent>
     @Query("SELECT * FROM life_event WHERE type='BRIEFING' ORDER BY occurredAt DESC LIMIT 1") fun briefing(): Flow<LifeEvent?>
     @Query("SELECT * FROM daily_summary ORDER BY date DESC") fun observeSummaryRows(): Flow<List<DailySummary>>
@@ -59,6 +63,11 @@ interface LifeDao {
     @Query("SELECT * FROM event_tag WHERE eventId=:id") suspend fun tagsFor(id: String): List<EventTag>
     @Query("SELECT * FROM event_entity WHERE eventId=:id") suspend fun entitiesFor(id: String): List<EventEntity>
     @Query("SELECT COUNT(*) FROM raw_event") suspend fun rawCount(): Int
+    @Query("SELECT * FROM life_event WHERE sourceType='NOTIFICATION' AND ((type='ADVERTISEMENT' AND occurredAt<=:advertisementCutoff) OR (type='NOTIFICATION' AND occurredAt<=:otherCutoff))")
+    suspend fun expiredNotifications(advertisementCutoff: Long, otherCutoff: Long): List<LifeEvent>
+    @Query("DELETE FROM life_event WHERE id=:id") suspend fun deleteEvent(id: String)
+    @Query("DELETE FROM raw_event WHERE sourceType='NOTIFICATION' AND sourceKey=:key AND NOT EXISTS (SELECT 1 FROM life_event e WHERE e.rawEventId=raw_event.id)")
+    suspend fun deleteNotificationRaws(key: String)
     @Query("DELETE FROM life_event") suspend fun clearEvents()
     @Query("DELETE FROM raw_event") suspend fun clearRaws()
 }

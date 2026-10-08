@@ -8,10 +8,10 @@ import java.security.MessageDigest
 import java.time.*
 import java.util.UUID
 
-class LifeRepository(val db: LifeDatabase) {
+class LifeRepository(val db: LifeDatabase, rules: () -> ParserRuleSet = { ParserRuleSet() }) {
     val dao = db.dao()
     private val mutex = Mutex()
-    private val parser = NotificationParser()
+    private val parser = NotificationParser(rules)
 
     suspend fun ingest(source: String, key: String, time: Long, payload: JSONObject): LifeEvent = mutex.withLock {
         val json = JSONObject(payload.toString()).put("occurredAt", time).toString()
@@ -20,7 +20,7 @@ class LifeRepository(val db: LifeDatabase) {
         val raw = if (previous?.hash == hash) previous else RawEvent(UUID.randomUUID().toString(), source, key,
             (previous?.revision ?: 0) + 1, time, System.currentTimeMillis(), json, hash).also { dao.insertRaw(it) }
         val existing = dao.event(source, key)
-        if (existing?.rawEventId == raw.id && (source != "NOTIFICATION" || JSONObject(existing.dataJson).optInt("parserVersion") == NotificationParser.VERSION)) existing else normalize(raw)
+        if (existing?.rawEventId == raw.id && (source != "NOTIFICATION" || parser.isCurrent(JSONObject(existing.dataJson)))) existing else normalize(raw)
     }
 
     private suspend fun normalize(raw: RawEvent): LifeEvent {
@@ -41,13 +41,30 @@ class LifeRepository(val db: LifeDatabase) {
             dao.clearTags(event.id); dao.clearEntities(event.id)
             dao.tags(parsed.tags.map { EventTag(event.id, it) })
             dao.entities(parsed.entities.map { (kind, name) -> EventEntity("${event.id}:$kind:$name", event.id, kind, name, name.lowercase().replace(" ", "")) })
+            if (event.sourceType == "CALENDAR") {
+                reconcileCalendarDuplicates(dao.calendarDuplicateCandidates(
+                    listOfNotNull(event.occurredAt, old?.occurredAt), listOfNotNull(event.calendarDate, old?.calendarDate)))
+            }
             // Persist dirty dates in the existing cache table; a crash cannot lose invalidation.
             val zone = ZoneId.systemDefault()
-            (affectedDates(event, zone) + old?.let { affectedDates(it, zone) }.orEmpty()).forEach { date ->
+            (if (changesSummary(old, event)) affectedDates(event, zone) + old?.let { affectedDates(it, zone) }.orEmpty() else emptySet()).forEach { date ->
                 dao.putSummary(DailySummary(date.toString(), null, null, null, 0, 0, 0, 0, 0, "{}", 0))
             }
         }
-        return event
+        return if (event.sourceType == "CALENDAR") requireNotNull(dao.eventById(event.id)) else event
+    }
+
+    private suspend fun reconcileCalendarDuplicates(events: List<LifeEvent>) {
+        val statuses = CalendarDuplicates.statuses(events)
+        events.forEach { event ->
+            val status = statuses[event.id] ?: return@forEach
+            if (event.status != status) {
+                dao.put(event.copy(status = status, updatedAt = System.currentTimeMillis()))
+                affectedDates(event, ZoneId.systemDefault()).forEach { date ->
+                    dao.putSummary(DailySummary(date.toString(), null, null, null, 0, 0, 0, 0, 0, "{}", 0))
+                }
+            }
+        }
     }
 
     suspend fun classifyNotification(id: String, type: String?, amount: Long? = null, cancelled: Boolean = false): LifeEvent = mutex.withLock {
@@ -77,10 +94,11 @@ class LifeRepository(val db: LifeDatabase) {
         dao.latestRaws().forEach { raw ->
             val event = dao.event(raw.sourceType, raw.sourceKey)
             try {
-                if (event?.rawEventId != raw.id || (raw.sourceType == "NOTIFICATION" && JSONObject(event.dataJson).optInt("parserVersion") != NotificationParser.VERSION)) normalize(raw)
+                if (event?.rawEventId != raw.id || (raw.sourceType == "NOTIFICATION" && !parser.isCurrent(JSONObject(event.dataJson)))) normalize(raw)
             } catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (_: org.json.JSONException) { failures++ }
         }
+        db.withTransaction { reconcileCalendarDuplicates(dao.calendarDuplicateCandidates()) }
         failures
     }
 
@@ -89,6 +107,17 @@ class LifeRepository(val db: LifeDatabase) {
             .put("title", event.title).put("summary", event.summary).put("status", "DELETED")
         event.endedAt?.let { json.put("endedAt", it) }
         ingest(event.sourceType, requireNotNull(event.sourceId), event.occurredAt, json)
+    }
+
+    suspend fun needsDerivation(zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone)): Boolean = mutex.withLock {
+        val rows = dao.summaryRows()
+        if (rows.any { it.updatedAt == 0L || JSONObject(it.summaryJson).optString("zone") != zone.id }) return@withLock true
+        val dates = rows.map { it.date }.toSet()
+        if ((-8L..1L).any { today.plusDays(it).toString() !in dates }) return@withLock true
+        val briefing = dao.event("DERIVED", "briefing:$today") ?: return@withLock true
+        val inputs = org.json.JSONArray(rows.filter { it.date >= today.minusDays(8).toString() && it.date <= today.toString() }.map { JSONObject().put("date", it.date).put("updatedAt", it.updatedAt) })
+        val data = JSONObject(briefing.dataJson)
+        data.optString("zone") != zone.id || data.optJSONArray("inputSummaryUpdatedAt")?.toString() != inputs.toString()
     }
 
     suspend fun rebuildSummaries(zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone), force: Boolean = false) = mutex.withLock {
@@ -126,6 +155,18 @@ class LifeRepository(val db: LifeDatabase) {
             .put("inputSummaryUpdatedAt", org.json.JSONArray(summaries.filter { it.date >= today.minusDays(8).toString() && it.date <= today.toString() }.map { JSONObject().put("date", it.date).put("updatedAt", it.updatedAt) }))
         dao.put(LifeEvent(old?.id ?: UUID.randomUUID().toString(), "BRIEFING", "LIFE", today.atStartOfDay(zone).toInstant().toEpochMilli(), null,
             "$today 아침 브리핑", body, "DERIVED", key, null, data.toString(), 0.5, old?.createdAt ?: now, now))
+    }
+
+    suspend fun purgeExpiredNotifications(now: Long = System.currentTimeMillis()): Int = mutex.withLock {
+        db.withTransaction {
+            val expired = dao.expiredNotifications(now - Duration.ofDays(14).toMillis(), now - Duration.ofDays(30).toMillis())
+            expired.forEach { event ->
+                dao.deleteEvent(event.id) // Foreign keys remove tags and entities together.
+                event.sourceId?.let { dao.deleteNotificationRaws(it) }
+            }
+            // These two types never contribute to daily summary or briefing totals.
+            expired.size
+        }
     }
 
     suspend fun clear() = mutex.withLock { db.withTransaction { dao.clearEvents(); dao.clearRaws(); dao.clearSummaries() } }

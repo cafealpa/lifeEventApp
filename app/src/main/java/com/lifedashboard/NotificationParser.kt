@@ -7,13 +7,15 @@ data class ParsedEvent(val type: String, val category: String, val title: String
 
 interface EventParser { fun parse(raw: RawEvent): List<ParsedEvent> }
 
-class NotificationParser : EventParser {
+class NotificationParser(private val rules: () -> ParserRuleSet = { ParserRuleSet() }) : EventParser {
+    fun isCurrent(data: JSONObject) = data.optInt("parserVersion") == VERSION && data.optLong("rulesVersion") == rules().version
     override fun parse(raw: RawEvent): List<ParsedEvent> {
         val json = JSONObject(raw.rawJson)
         val title = json.optString("title")
         val body = json.optString("text")
         val text = "$title\n$body"
-        val data = JSONObject().put("schemaVersion", 1).put("parserVersion", VERSION).put("package", json.optString("package"))
+        val ruleSet = rules()
+        val data = JSONObject().put("rulesVersion", ruleSet.version).put("schemaVersion", 1).put("parserVersion", VERSION).put("package", json.optString("package"))
         if (title.startsWith("(광고)") || body.startsWith("(광고)")) {
             if (json.optBoolean("groupSummary") || json.optBoolean("ongoing")) data.put("suppressed", true)
             return listOf(ParsedEvent("ADVERTISEMENT", "ADVERTISEMENT", title.ifBlank { "광고 알림" }, body, data, tags = listOf("광고")))
@@ -21,20 +23,26 @@ class NotificationParser : EventParser {
         if (json.optBoolean("groupSummary") || json.optBoolean("ongoing")) {
             return listOf(ParsedEvent("NOTIFICATION", "COMMUNICATION", title.ifBlank { "알림" }, body, data.put("suppressed", true)))
         }
+        ruleSet.rules.firstOrNull { it.matches(title, body, json.optString("package")) }?.let {
+            return listOf(applyParserRule(it, title, body, data))
+        }
         // Regional-currency notifications label the payment in the heading, often without 원.
         // Other formats keep the existing parser; incentives are excluded from its amount candidates below.
         if (text.contains("지역화폐") && Regex("결제\\s*(?:완료|취소)").containsMatchIn(text)) {
             parseRegionalPayment(text, data)?.let { return listOf(it) }
         }
-        val approval = Regex("승인|결제\\s*(?:완료|취소)|일시불|할부|체크카드")
+        val approval = Regex("승인|결제(?:가)?\\s*(?:완료|취소)|일시불|할부|체크카드")
         val card = Regex("(현대|삼성|신한|국민|KB|롯데|하나|우리|농협|NH|BC|비씨)\\s*카드").find(text)?.value
+        val labelledAmount = labelledPaymentAmount(text.replace(Regex("결제\\s+금액"), "결제금액"), "결제금액")
         val amounts = Regex("([0-9][0-9,]*)\\s*원").findAll(text).filter {
             !text.substring(maxOf(0, it.range.first - 12), it.range.first).contains(Regex("잔액|누적|한도|포인트|할인|캐시백|인센티브"))
         }.toList()
-        if (approval.containsMatchIn(text) && amounts.size == 1 && !Regex("승인\\s*거절|결제\\s*실패|승인\\s*실패|예정|혜택|이벤트").containsMatchIn(text)) {
-            val amount = amounts.single().groupValues[1].replace(",", "").toLongOrNull()
+        val confirmedLabelledPayment = labelledAmount != null && Regex("결제(?:가)?\\s*완료되었습니다").containsMatchIn(text)
+        val rejectedPayment = Regex("승인\\s*거절|(?:결제|승인)(?:가)?\\s*실패|결제(?:가)?\\s*예정|결제(?:가)?\\s*완료\\s*(?:시|되면)|혜택|이벤트").containsMatchIn(text)
+        if (approval.containsMatchIn(text) && (labelledAmount != null || amounts.size == 1) && !rejectedPayment && (confirmedLabelledPayment || !text.contains("예정"))) {
+            val amount = labelledAmount ?: amounts.single().groupValues[1].replace(",", "").toLongOrNull()
             if (amount != null) {
-                val cancelled = Regex("취소").containsMatchIn(text)
+                val cancelled = Regex("(?:결제|승인)(?:가)?\\s*취소").containsMatchIn(text)
                 val merchant = Regex("(?:가맹점|사용처|이용처)\\s*[:：]\\s*([^\\n]+)").find(text)?.groupValues?.get(1)?.trim()
                 data.put("amount", amount).put("currency", "KRW").put("paymentKind", if (cancelled) "CANCELLATION" else "APPROVAL")
                 data.put("cardCompany", card).put("merchant", merchant)
@@ -42,10 +50,11 @@ class NotificationParser : EventParser {
                     tags = listOf("결제"), entities = listOfNotNull(merchant?.let { "COMPANY" to it }).toMap()))
             }
         }
-        if (Regex("배송|배달|택배").containsMatchIn(text) && Regex("출발|완료|도착|집화|배송 중|배송중").containsMatchIn(text)) {
+        val delivery = Regex("(?:배송|배달|택배)(?:이|가|을|를)?\\s*(?:출발|완료|도착|집화|중)|(?:배송|배달|택배)[^\\n.!?]{0,20}(?:출발|도착|집화)").find(text)
+        if (delivery != null) {
             val carrier = Regex("CJ대한통운|한진택배|롯데택배|우체국|로젠택배|쿠팡").find(text)?.value
             val tracking = Regex("(?:송장|운송장)(?:번호)?\\s*[:：]?\\s*([0-9-]{8,})").find(text)?.groupValues?.get(1)
-            val status = when { text.contains("예정") -> "EXPECTED"; text.contains("완료") -> "DELIVERED"; text.contains("출발") -> "OUT_FOR_DELIVERY"; else -> "IN_TRANSIT" }
+            val status = when { text.contains("예정") -> "EXPECTED"; delivery.value.contains("완료") -> "DELIVERED"; delivery.value.contains("출발") -> "OUT_FOR_DELIVERY"; else -> "IN_TRANSIT" }
             data.put("carrier", carrier).put("trackingNumber", tracking).put("deliveryStatus", status)
             data.put("product", Regex("상품(?:명)?\\s*[:：]\\s*([^\\n]+)").find(text)?.groupValues?.get(1))
             data.put("expectedArrival", Regex("[^\\n]*(?:도착 예정|오늘 도착)[^\\n]*").find(text)?.value)
@@ -84,5 +93,5 @@ class NotificationParser : EventParser {
         return ParsedEvent("PAYMENT", "FINANCE", merchant, "${if (cancelled) "취소" else "승인"} ${amount}원", data,
             tags = listOf("결제", "지역화폐"), entities = mapOf("COMPANY" to merchant))
     }
-    companion object { const val VERSION = 4 }
+    companion object { const val VERSION = 5 }
 }

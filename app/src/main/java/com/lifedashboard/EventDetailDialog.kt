@@ -43,6 +43,11 @@ fun EventDetailDialog(detail: EventDetail, busy: Boolean, message: String, onCla
                 SelectionContainer { Text(detail.event.summary?.takeIf { it.isNotBlank() } ?: "표시할 내용이 없어요.") }
                 if (detail.event.sourceType == "NOTIFICATION") {
                     Text("${notificationClassifications[detail.event.type] ?: detail.event.type} · ${if (manual) "직접 분류" else "자동 분류"}", style = MaterialTheme.typography.labelMedium)
+                    if (!manual) {
+                        val parsedData = JSONObject(detail.event.dataJson)
+                        parsedData.optString("parserRuleName").takeIf { it.isNotBlank() }?.let { Text("적용 규칙: $it", style = MaterialTheme.typography.bodySmall) }
+                        parsedData.optString("ruleWarning").takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    }
                     OutlinedButton(onClick = { editing = true }, enabled = !busy) { Text("분류 변경") }
                 }
                 TextButton(

@@ -186,24 +186,6 @@ fun DashboardContent(summaries: List<DailySummary>, briefing: LifeEvent?, schedu
                 SummaryRow("RESERVATION", "예약 알림", current?.let { "오늘 ${it.reservationCount}건" } ?: "집계 대기") { onSelect("RESERVATION",today) }
             }
         }
-        item {
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("수집 상태", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    states.entries.forEachIndexed { index, (source, state) ->
-                        if (index > 0) HorizontalDivider(color = Paper)
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(sourceLabel(source), style = MaterialTheme.typography.labelLarge)
-                            Text(state, style = MaterialTheme.typography.bodySmall, color = Muted)
-                        }
-                    }
-                    current?.let {
-                        HorizontalDivider(color = Paper)
-                        Text("집계 반영 ${Instant.ofEpochMilli(it.updatedAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("M/d HH:mm"))}", style = MaterialTheme.typography.bodySmall, color = Muted)
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -247,7 +229,7 @@ private fun eventStatus(status: String) = when(status) { "ACTIVE" -> ""; "CANCEL
 fun TimelineContent(events: List<LifeEvent>, query: TimelineQuery, onQuery: (TimelineQuery) -> Unit, onOpen: (LifeEvent) -> Unit) {
     var pickDate by remember { mutableStateOf(false) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(query.date,query.type,query.inbox) { listState.scrollToItem(0) }
+    LaunchedEffect(query.date,query.type,query.inbox,query.oldestFirst) { listState.scrollToItem(0) }
     Column {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("" to "전체", "CALENDAR" to "일정", "HEALTH" to "건강", "PAYMENT" to "결제", "DELIVERY" to "배송", "RESERVATION" to "예약", "ADVERTISEMENT" to "광고", "SLEEP" to "수면", "STEP_SUMMARY" to "걸음", "EXERCISE" to "운동", "NOTIFICATION" to "기타", "BRIEFING" to "브리핑").forEach { (type,label) ->
@@ -262,7 +244,10 @@ fun TimelineContent(events: List<LifeEvent>, query: TimelineQuery, onQuery: (Tim
             LifeIconButton("NEXT","다음 날짜") { onQuery(query.copy(date = query.date.plusDays(1),limit = 100)) }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("${events.size}${if (events.size >= query.limit) "+" else ""}건 · 최신순", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Muted)
+            TextButton(onClick = { onQuery(query.copy(oldestFirst = !query.oldestFirst, limit = 100)) }) {
+                Text("${events.size}${if (events.size >= query.limit) "+" else ""}건 · ${if (query.oldestFirst) "시간순" else "최신순"}", style = MaterialTheme.typography.labelMedium, color = Muted)
+            }
+            Spacer(Modifier.weight(1f))
             TextButton(onClick = { onQuery(query.copy(date = LocalDate.now(),limit = 100)) }) { Text("오늘") }
         }
         LazyColumn(modifier = Modifier.weight(1f), state = listState, contentPadding = PaddingValues(start = 20.dp,end = 20.dp,bottom = 24.dp)) {
