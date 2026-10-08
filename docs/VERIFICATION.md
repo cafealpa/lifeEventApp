@@ -252,3 +252,7 @@ JDK `C:/Users/cafea/.jdks/openjdk-21.0.2`에서 `./gradlew.bat :app:assembleDebu
 ## 2026-10-08 — v0.6.0 로컬 릴리즈 검증
 
 JDK 21에서 `scripts/release.ps1` 성공(Gradle 1분 54초). 단위 테스트 78개 통과(실패/오류 0), Release lint/build 성공, 기존 인증서/패키지/버전 0.6.0(7)/non-debuggable 검증 통과. 배포 산출물은 release-output/v0.6.0의 LifeDashboard.apk/update.json/SHA256SUMS.txt다. 실기기 미검증. 공개 재다운로드 검증은 사용자 명시 요청으로 생략한다.
+
+### v0.6.0 게시 결과
+
+소스 태그 6404052 및 정식 v0.6.0 게시 성공. GitHub 응답에서 draft=false/prerelease=false, APK/메타데이터/체크섬 uploaded 확인. APK 크기 25,732,196 bytes 및 GitHub digest와 로컬 SHA-256 일치. 공개 재다운로드 검증은 사용자 요청으로 수행하지 않았다. Release lint 오류 0/경고 41.

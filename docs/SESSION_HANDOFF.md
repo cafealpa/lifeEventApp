@@ -407,3 +407,12 @@ AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 
 ## 2026-10-08 — v0.6.0 릴리즈 준비
 
 사용자가 GitHub 릴리즈 공개 게시를 명시 승인했다. 오늘 브리핑 개편, 상태표시줄 대비 및 요약 메뉴형 설정을 v0.6.0(versionCode 7)에 포함한다. 기존 서명과 DB schema v1 유지. 로컬 scripts/release.ps1 검증 후 소스·태그·LifeDashboard.apk·update.json·SHA256SUMS.txt를 기존 cafealpa/lifeEventApp에 게시한다. 사용자 요청으로 공개 APK 재다운로드 검증은 생략한다. 실기기 검증은 미수행이며 문제 발생 시 데이터 삭제/다운그레이드 대신 더 높은 버전 코드의 수정판을 배포한다.
+
+## 2026-10-08 — v0.6.0 공개 배포 완료
+
+- https://github.com/cafealpa/lifeEventApp/releases/tag/v0.6.0 정식 게시 완료. latest 지정 성공, 소스 태그 6404052, versionCode 7.
+- 오늘 브리핑 개편, 시스템 바 대비, 실제 권한 상태 및 요약 메뉴형 설정 포함. 기존 서명과 DB schema v1 유지.
+- 단위 테스트 78개 통과, Release lint 오류 0/경고 41, 빌드 및 인증서/패키지/버전/non-debuggable 확인 완료.
+- 소스/main/tag 및 LifeDashboard.apk/update.json/SHA256SUMS.txt 게시. GitHub 조회로 draft=false/prerelease=false 및 세 자산 uploaded 확인.
+- APK 25,732,196 bytes, SHA-256 560c105ffa7a55bfa1fb385b1365f7c4911ec01fd73fc80f50b24113f656b727. GitHub 응답 digest와 로컬 값 일치. 사용자 요청으로 공개 APK 재다운로드 검증 생략.
+- 실제 단말 설치/권한 복귀/렌더링/백그라운드 검증은 미수행. 앞선 미배포 기록은 당시 상태이며 이번 릴리즈로 게시 완료했다.
