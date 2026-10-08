@@ -260,3 +260,7 @@ JDK 21에서 `scripts/release.ps1` 성공(Gradle 1분 54초). 단위 테스트 7
 ## 2026-10-08 — 홈 카드 통합 및 브리핑 종료 검증
 
 JDK 21에서 `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --console=plain` 성공. 후속 테스트 추가 뒤 `:app:testDebugUnitTest` 재실행 성공. 홈 일정 시작/종료 및 종일 구분, 최근 활성 배송 상태와 완료 알림 수, 브리핑 없이 집계 완료, 기존 BRIEFING 행 보존 및 타임라인 제외를 검증했다. lint 오류 0/경고 41, `git diff --check` 통과. 계측 테스트는 빌드만 수행했으며 단말 렌더링/기존 아침 예약 취소 실동작/공개 배포는 미수행.
+
+## 2026-10-08 — v0.7.0 로컬 릴리즈 검증
+
+JDK 21에서 scripts/release.ps1 성공(Gradle 1분 16초). 단위 테스트/Release lint/build 및 기존 인증서·패키지·버전 0.7.0(8)·non-debuggable 검증 통과. 배포 파일은 release-output/v0.7.0에 생성했다. 사용자 요청으로 공개 APK 재다운로드는 생략한다. 단말 검증은 미수행.
