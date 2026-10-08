@@ -236,3 +236,7 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 ## 2026-10-08 — 집계 최적화 검증
 
 전체 테스트 76개, assembleDebug/lintDebug 성공. 광고/기타 및 동일 집계 입력의 메타데이터 변경 시 집계 생략, 결제 금액/분류 변경 시 재계산, 새 날짜/타임존/브리핑 누락 복구, 정상 수집 후 5분 경계 검증. DeriveSchedulingTest는 일반 알림을 예약하지 않는 새 정책에 맞게 수정하고 결제 연속 변경/동일 입력 중복 수신/마지막 갱신 예약을 검증했다. diff 검사 통과. 700ms 배지와 단말 복귀 UI는 실기기 미검증, 공개 릴리즈 미수행.
+
+## 2026-10-08 — v0.5.0 공개 릴리즈 검증
+
+`scripts/release.ps1 -Publish` 성공. 76개 테스트 통과, Release lint 오류 0/경고 39, 기존 서명·패키지·버전·non-debuggable 확인. cf3c67b 소스와 v0.5.0 태그/정식 latest 게시. 공개 APK 25,682,932 bytes, SHA-256 a4db5f4dd112b2cf88433a866eb66edc39c018d8cd7707d91b7a31c1a1038055. 인증 없는 재다운로드/메타데이터/GitHub digest/SHA256SUMS.txt 일치 확인. 실제 단말 설치 및 실행 검증은 미수행.

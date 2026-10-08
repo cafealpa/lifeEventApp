@@ -350,3 +350,12 @@ AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 
 - 기존 서명과 DB schema v1 유지. 광고 14일/기타 30일 원본 포함 자동 삭제 정책은 릴리즈 노트에 명시했다.
 - scripts/release.ps1 -Publish에서 전체 테스트/Release lint/build/서명 검증 후 소스·태그·APK·update.json·체크섬 게시 및 공개 다운로드 검증한다.
 - 실제 단말 설치/화면/OS 백그라운드 검증은 미수행. 문제 발생 시 기존 자산 덮어쓰기/다운그레이드 대신 수정 버전으로 배포한다.
+
+## 2026-10-08 — v0.5.0 공개 배포 완료
+
+- https://github.com/cafealpa/lifeEventApp/releases/tag/v0.5.0 정식/latest 게시 완료. 소스 태그 cf3c67b, versionCode 6.
+- 이번 버전의 앱 선택 UI/일정 중복/파서 규칙 및 v5/알림 보관/정렬/집계 최적화/홈 카드 제거는 공개 파일에 포함된다. 앞의 미배포 기록은 당시 상태다.
+- 전체 테스트 76개 통과, Release lint 오류 0/경고 39, Release 빌드/기존 서명/패키지/버전/non-debuggable 검사 통과.
+- 소스·태그·APK/update.json/SHA256SUMS.txt 게시 및 인증 없는 latest API/공개 APK 다운로드 검증, GitHub digest와 공개 체크섬 대조 완료.
+- APK 25,682,932 bytes; SHA-256 a4db5f4dd112b2cf88433a866eb66edc39c018d8cd7707d91b7a31c1a1038055.
+- 실제 단말 설치/화면/백그라운드 실행 검증은 미수행. 이전의 단말 체크리스트를 이어서 확인한다.
