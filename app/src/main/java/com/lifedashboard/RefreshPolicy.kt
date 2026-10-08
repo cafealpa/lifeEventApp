@@ -9,9 +9,10 @@ private fun summaryInput(event: LifeEvent?): List<Any?>? {
         "PAYMENT" -> listOf("amount", "currency", "paymentKind")
         "SLEEP" -> listOf("sleepIntervals")
         "STEP_SUMMARY" -> listOf("count")
+        "DELIVERY" -> listOf("deliveryStatus")
         else -> emptyList()
     }
-    return listOf(event.type, event.occurredAt, event.endedAt, event.calendarDate, data.optString("date")) + keys.map { data.opt(it)?.toString() }
+    return listOf(event.type, event.occurredAt, event.endedAt, event.calendarDate, data.optString("date"), if (event.type in setOf("CALENDAR", "DELIVERY")) event.title else null) + keys.map { data.opt(it)?.toString() }
 }
 fun changesSummary(before: LifeEvent?, after: LifeEvent?) = summaryInput(before) != summaryInput(after)
 

@@ -30,7 +30,7 @@ fun ParserRulesScreen(vm: LifeViewModel, onBack: () -> Unit) {
         Column {
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 LifeIconButton("BACK", "뒤로", !busy) { if (editing != null) editing = null else onBack() }
-                Text(if (editing == null) "알림 파서 규칙" else "규칙 편집", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(if (editing == null) "알림 분류 규칙" else "규칙 편집", Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 if (editing == null) TextButton(onClick = { editing = ParserRule() }, enabled = !busy) { Text("규칙 추가") }
             }
             if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("규칙 적용 및 저장된 원본 재분석 중…", Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall) }

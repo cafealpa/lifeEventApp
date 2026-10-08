@@ -189,37 +189,6 @@ fun DashboardContent(summaries: List<DailySummary>, briefing: LifeEvent?, schedu
     }
 }
 
-@Composable
-private fun BriefingCard(briefing: LifeEvent?) {
-    var expanded by rememberSaveable(briefing?.id) { mutableStateOf(false) }
-    val hasContent = !briefing?.summary.isNullOrBlank()
-    Card(
-        onClick = { expanded = !expanded },
-        enabled = hasContent,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Mist, disabledContainerColor = Mist, disabledContentColor = Ink)
-    ) {
-        Column(
-            Modifier.fillMaxWidth().animateContentSize().heightIn(min = 180.dp).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LifeIcon("BRIEFING", Modifier.size(32.dp))
-                Text("오늘의 브리핑", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            }
-            Text(
-                briefing?.summary?.takeIf { it.isNotBlank() } ?: "생활 기록이 모이면 하루 요약을 보여드려요.",
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = if (expanded) Int.MAX_VALUE else 6,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (hasContent) TextButton(
-                onClick = { expanded = !expanded },
-                modifier = Modifier.align(Alignment.End).semantics { stateDescription = if (expanded) "펼쳐짐" else "접힘" }
-            ) { Text(if (expanded) "접기" else "자세히 보기") }
-        }
-    }
-}
 fun eventTime(event: LifeEvent): String = if (event.calendarDate != null) "종일" else Instant.ofEpochMilli(if (event.type == "SLEEP") event.endedAt ?: event.occurredAt else event.occurredAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
 
 private fun eventStatus(status: String) = when(status) { "ACTIVE" -> ""; "CANCELLED" -> "취소"; "UNVERIFIED" -> "확인 필요"; "NO_DATA" -> "데이터 없음"; else -> status }

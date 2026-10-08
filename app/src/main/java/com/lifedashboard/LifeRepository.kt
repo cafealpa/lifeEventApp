@@ -109,7 +109,7 @@ class LifeRepository(val db: LifeDatabase, rules: () -> ParserRuleSet = { Parser
         ingest(event.sourceType, requireNotNull(event.sourceId), event.occurredAt, json)
     }
 
-    suspend fun needsDerivation(zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone)): Boolean = mutex.withLock {
+    suspend fun needsDerivation(zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone), now: Long = System.currentTimeMillis()): Boolean = mutex.withLock {
         val rows = dao.summaryRows()
         if (rows.any { it.updatedAt == 0L || JSONObject(it.summaryJson).optString("zone") != zone.id }) return@withLock true
         val dates = rows.map { it.date }.toSet()
@@ -117,7 +117,8 @@ class LifeRepository(val db: LifeDatabase, rules: () -> ParserRuleSet = { Parser
         val briefing = dao.event("DERIVED", "briefing:$today") ?: return@withLock true
         val inputs = org.json.JSONArray(rows.filter { it.date >= today.minusDays(8).toString() && it.date <= today.toString() }.map { JSONObject().put("date", it.date).put("updatedAt", it.updatedAt) })
         val data = JSONObject(briefing.dataJson)
-        data.optString("zone") != zone.id || data.optJSONArray("inputSummaryUpdatedAt")?.toString() != inputs.toString()
+        val events = dao.summaryEvents(today.atStartOfDay(zone).toInstant().toEpochMilli(), today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), today.toString())
+        data.optInt("generatorVersion") != TodayBriefing.VERSION || now >= data.optLong("nextChangeAt", Long.MAX_VALUE) || data.optString("eventInputs") != TodayBriefing.inputs(events) || data.optString("zone") != zone.id || data.optJSONArray("inputSummaryUpdatedAt")?.toString() != inputs.toString()
     }
 
     suspend fun rebuildSummaries(zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone), force: Boolean = false) = mutex.withLock {
@@ -140,21 +141,19 @@ class LifeRepository(val db: LifeDatabase, rules: () -> ParserRuleSet = { Parser
         }
     }
 
-    suspend fun generateBriefing(today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault()) = mutex.withLock {
+    suspend fun generateBriefing(today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault(), now: Long = System.currentTimeMillis()) = mutex.withLock {
         val summaries = dao.summariesOnce()
-        val yesterday = summaries.find { it.date == today.minusDays(1).toString() }
         val current = summaries.find { it.date == today.toString() }
-        val history = summaries.filter { it.date >= today.minusDays(8).toString() && it.date < today.minusDays(1).toString() }.mapNotNull { it.sleepMinutes }
-        val morning = dao.calendarForDay(today.atStartOfDay(zone).toInstant().toEpochMilli(), today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), today.toString()).count { it.type == "CALENDAR" && it.status == "ACTIVE" && eventDate(it, zone) == today && Instant.ofEpochMilli(it.occurredAt).atZone(zone).hour < 12 }
-        val body = BriefingBuilder.build(yesterday, current, history, morning)
+        val events = dao.summaryEvents(today.atStartOfDay(zone).toInstant().toEpochMilli(), today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(), today.toString())
+        val content = TodayBriefing.build(today, zone, now, current, events)
+        val body = TodayBriefing.text(content)
         val key = "briefing:$today"
         val old = dao.event("DERIVED", key)
-        val now = System.currentTimeMillis()
-        val data = JSONObject().put("schemaVersion", 1).put("generatorVersion", 1).put("date", today.toString())
+        val data = content.put("schemaVersion", 1).put("generatorVersion", TodayBriefing.VERSION).put("date", today.toString())
             .put("zone", zone.id).put("inputFrom", today.minusDays(8).toString()).put("inputTo", today.toString()).put("generatedAt", now)
             .put("inputSummaryUpdatedAt", org.json.JSONArray(summaries.filter { it.date >= today.minusDays(8).toString() && it.date <= today.toString() }.map { JSONObject().put("date", it.date).put("updatedAt", it.updatedAt) }))
         dao.put(LifeEvent(old?.id ?: UUID.randomUUID().toString(), "BRIEFING", "LIFE", today.atStartOfDay(zone).toInstant().toEpochMilli(), null,
-            "$today 아침 브리핑", body, "DERIVED", key, null, data.toString(), 0.5, old?.createdAt ?: now, now))
+            "$today 오늘의 브리핑", body, "DERIVED", key, null, data.toString(), 0.5, old?.createdAt ?: now, now))
     }
 
     suspend fun purgeExpiredNotifications(now: Long = System.currentTimeMillis()): Int = mutex.withLock {

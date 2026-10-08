@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
+import androidx.core.view.WindowCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
@@ -71,6 +72,14 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun refresh(force: Boolean = true) { homeDate.value = LocalDate.now(); work { graph.refresh(force = force) } }
+    fun updateBriefingClock() {
+        homeDate.value = LocalDate.now()
+        viewModelScope.launch(Dispatchers.IO) {
+            try { graph.derive() }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { message.value = "브리핑 갱신 실패: ${e.javaClass.simpleName}" }
+        }
+    }
     fun open(event: LifeEvent) = work { detail.value = EventDetail(event, event.rawEventId?.let { graph.repository.dao.raw(it) }, graph.repository.dao.tagsFor(event.id), graph.repository.dao.entitiesFor(event.id)) }
     fun classify(id: String, type: String?, amount: Long?, cancelled: Boolean) = work {
         val updated = graph.classifyNotification(id,type,amount,cancelled)
@@ -79,12 +88,20 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
     fun filter(type: String = "", inbox: Boolean = false, date: LocalDate = LocalDate.now()) { query.value = TimelineQuery(date, type, inbox, oldestFirst = query.value.oldestFirst) }
 }
 
+private fun ComponentActivity.configureSystemBars() {
+    WindowCompat.getInsetsController(window, window.decorView).apply {
+        isAppearanceLightStatusBars = true
+        isAppearanceLightNavigationBars = true
+    }
+}
+
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { LifeTheme { LifeScreen() } } }
+    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); configureSystemBars(); setContent { LifeTheme { LifeScreen() } } }
 }
 class PrivacyActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        configureSystemBars()
         setContent { LifeTheme { Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column(Modifier.padding(20.dp)) { Text("생활 데이터 이용 안내", style = MaterialTheme.typography.headlineSmall); Text(PRIVACY); Button(onClick = { finish() }) { Text("닫기") } } } } }
     }
 }
@@ -110,6 +127,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     val message by vm.message.collectAsStateWithLifecycle()
     val detail by vm.detail.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     var enabled by remember { mutableStateOf(vm.graph.status.enabled()) }
     var deleteConfirm by remember { mutableStateOf(false) }
     val appLinks = remember(context) { HomeAppLinks(context) }
@@ -120,28 +138,33 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     if (showParserRules) { ParserRulesScreen(vm) { showParserRules = false }; return }
     var showUpdates by rememberSaveable { mutableStateOf(false) }
     if (showUpdates) { UpdateScreen(onBack = { showUpdates = false }); return }
-    val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.refresh() }
-    val healthPermissions = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { vm.refresh() }
+    var permissionRevision by remember { mutableIntStateOf(0) }
+    val permissionStates = rememberPermissionStates(vm.graph, permissionRevision)
+    val calendarPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permissionRevision++; vm.refresh() }
+    val healthPermissions = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { permissionRevision++; vm.refresh() }
+    val screenScope = rememberCoroutineScope()
     LifecycleResumeEffect(Unit) {
         vm.refresh(force = false)
-        onPauseOrDispose { }
+        val clockJob = screenScope.launch { while (true) { delay(60_000); vm.updateBriefingClock() } }
+        onPauseOrDispose { clockJob.cancel() }
     }
     fun select(type: String, date: LocalDate = LocalDate.now()) { vm.filter(type, date = date); tab = 1 }
-    BackHandler(enabled = tab != 0 && detail == null && !deleteConfirm) { tab = 0 }
+    fun goBack() { if (tab == 3 && settingsPage != null) settingsPage = null else tab = 0 }
+    BackHandler(enabled = tab != 0 && detail == null && !deleteConfirm && appPicker == null) { goBack() }
     Scaffold(Modifier.safeDrawingPadding(), bottomBar = {
         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
             listOf("홈", "타임라인").forEachIndexed { i, label ->
-                NavigationBarItem(selected = tab == i, onClick = { tab = i; if (i == 1) vm.filter() },
+                NavigationBarItem(selected = tab == i, onClick = { tab = i; settingsPage = null; if (i == 1) vm.filter() },
                     icon = { LifeIcon(if(i == 0) "HOME" else "TIMELINE", tint = if(tab == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }, label = { Text(label) })
             }
         }
     }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(start = 20.dp,end = 8.dp,top = 12.dp,bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                if(tab == 2 || tab == 3) LifeIconButton("BACK","뒤로") { tab = 0 }
+                if(tab == 2 || tab == 3) LifeIconButton("BACK","뒤로") { goBack() }
                 Column(Modifier.weight(1f)) {
                     if(tab == 0) Text(LocalDate.now().format(DateTimeFormatter.ofPattern("M월 d일 EEEE", java.util.Locale.KOREAN)),style = MaterialTheme.typography.bodySmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(when(tab) { 0 -> "오늘 한눈에"; 1 -> "타임라인"; 2 -> "알림 보관함"; else -> "설정" }, style = MaterialTheme.typography.headlineSmall,fontWeight = FontWeight.Bold)
+                    Text(when(tab) { 0 -> "오늘 한눈에"; 1 -> "타임라인"; 2 -> "알림 보관함"; else -> settingsPage?.title ?: "설정" }, style = MaterialTheme.typography.headlineSmall,fontWeight = FontWeight.Bold)
                     if (tab == 0) {
                         val failed = states["PROCESSING"]?.startsWith("집계 실패") == true && !aggregating
                         if (showAggregationBadge || failed) {
@@ -158,7 +181,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                     if(tab == 1 || tab == 2) Text(if(tab == 1) "차곡차곡 쌓이는 나의 하루" else "수집한 알림과 분류 결과",style = MaterialTheme.typography.bodySmall,color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 LifeIconButton("REFRESH","새로고침",enabled && !busy) { vm.refresh() }
-                if(tab != 3) LifeIconButton("SETTINGS","설정") { tab = 3 }
+                if(tab != 3) LifeIconButton("SETTINGS","설정") { settingsPage = null; tab = 3 }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (message.isNotEmpty() && message != "처리 완료") Text(message, Modifier.padding(horizontal = 20.dp,vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
@@ -166,7 +189,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                 Surface(color = MaterialTheme.colorScheme.primaryContainer,shape = MaterialTheme.shapes.medium,modifier = Modifier.padding(horizontal = 20.dp,vertical = 8.dp)) {
                     Row(Modifier.padding(start = 12.dp,end = 4.dp),verticalAlignment = Alignment.CenterVertically) {
                         Text("수집을 시작하고 생활 기록을 모아보세요.",Modifier.weight(1f),style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = { tab = 3 }) { Text("설정 열기") }
+                        TextButton(onClick = { settingsPage = null; tab = 3 }) { Text("설정 열기") }
                     }
                 }
             }
@@ -179,25 +202,70 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                     }
                 },onSelect = { type,date -> select(type,date) },onInbox = { vm.filter(inbox = true); tab = 2 },onOpen = vm::open)
                 1, 2 -> TimelineContent(events,query,onQuery = { vm.query.value = it },onOpen = vm::open)
-                3 -> Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = { showUpdates = true }) { Text("앱 업데이트 · ${BuildConfig.VERSION_NAME}") }
-                    OutlinedButton(onClick = { showParserRules = true }, enabled = !busy) { Text("알림 파서 규칙") }
-                    HomeAppLinkSettings(appLinks, appLinkRevision) { type -> launchAfterPick = false; appPicker = type }
-                    Text("자동 삭제: 알림 발생 시각부터 광고 14일 · 기타 30일. 원본도 함께 삭제해요. 앱을 열거나 약 6시간마다 정리하며, 수집 중지 중에도 적용돼요.", style = MaterialTheme.typography.bodySmall)
-                    Text("생활 데이터 이용 안내", style = MaterialTheme.typography.titleMedium); Text(PRIVACY)
-                    Button(onClick = { enabled = !enabled; vm.graph.status.enable(enabled); if (enabled) { vm.graph.schedule(); vm.refresh() } }, enabled = !busy) { Text(if (enabled) "수집 중지" else "동의하고 수집 시작") }
-                    Button(onClick = { calendarPermission.launch(Manifest.permission.READ_CALENDAR) }, enabled = enabled) { Text("일정 읽기 권한") }
-                    Button(onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, enabled = enabled) { Text("알림 접근 설정") }
-                    Button(onClick = {
-                        if (vm.graph.health.availability() == HealthConnectClient.SDK_AVAILABLE) healthPermissions.launch(HealthCollector.permissions)
-                        else vm.message.value = "Health Connect 설치 또는 업데이트가 필요해요"
-                    }, enabled = enabled) { Text("건강 데이터 권한") }
-                    Button(onClick = { if (vm.graph.health.backgroundSupported()) healthPermissions.launch(HealthCollector.permissions + HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND) else vm.message.value = "이 기기는 백그라운드 건강 읽기를 지원하지 않아요" }, enabled = enabled) { Text("건강 백그라운드 권한 (선택)") }
-                    Text("일정: 최근 30일~향후 90일 · 건강: 최근 29일 · 자동 갱신: 약 6시간 간격과 앱 실행 시. OS 제약으로 실행이 지연될 수 있어요.")
-                    states.forEach { (source, state) -> Text("${sourceLabel(source)}: $state") }
-                    OutlinedButton(onClick = { vm.work { vm.graph.reprocess() } }, enabled = !busy) { Text("저장된 원본 다시 분석") }
-                    OutlinedButton(onClick = { deleteConfirm = true }, enabled = !busy) { Text("모든 로컬 데이터 삭제") }
-                }
+                3 -> key(settingsPage) { Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (settingsPage == null) SettingsOverview(enabled, permissionStates, states) { settingsPage = it }
+                    if (settingsPage == SettingsPage.COLLECTION) {
+                    SettingsCard("생활 데이터 이용 안내", "HEALTH") {
+                        Text(PRIVACY, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.small) {
+                            Text(if (enabled) "수집 켜짐" else "수집 꺼짐", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
+                        }
+                        Button(onClick = { enabled = !enabled; vm.graph.status.enable(enabled); if (enabled) { vm.graph.schedule(); vm.refresh() } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(if (enabled) "수집 중지" else "동의하고 수집 시작") }
+                        Text("권한 상태", style = MaterialTheme.typography.titleSmall)
+                        if (!enabled) Text("수집에 동의하면 아래에서 필요한 권한을 허용할 수 있어요.", style = MaterialTheme.typography.bodySmall)
+                        PermissionAction("일정 읽기", "캘린더에 저장된 일정을 가져와요", permissionStates.calendar, enabled && !busy) {
+                            val permissionPrefs = vm.graph.context.getSharedPreferences("permission-ui", 0)
+                            val activity = context as? android.app.Activity
+                            val blocked = permissionPrefs.getBoolean("calendarRequested", false) && activity != null &&
+                                !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.READ_CALENDAR)
+                            if (permissionStates.calendar.allowed || blocked) {
+                                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")))
+                            } else {
+                                permissionPrefs.edit().putBoolean("calendarRequested", true).apply()
+                                calendarPermission.launch(Manifest.permission.READ_CALENDAR)
+                            }
+                        }
+                        PermissionAction("알림 접근", "다른 앱에서 도착한 알림을 수집해요", permissionStates.notification, enabled && !busy) {
+                            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }
+                        PermissionAction("건강 데이터", "걸음수 · 수면 · 운동 권한을 확인해요", permissionStates.health, enabled && !busy) {
+                            if (vm.graph.health.availability() == HealthConnectClient.SDK_AVAILABLE) {
+                                if (permissionStates.health.allowed) context.startActivity(Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS))
+                                else healthPermissions.launch(HealthCollector.permissions)
+                            } else vm.message.value = "Health Connect 설치 또는 업데이트가 필요해요"
+                        }
+                        PermissionAction("건강 백그라운드 · 선택", "앱을 닫아도 건강 기록을 읽을 수 있어요", permissionStates.background, enabled && !busy) {
+                            if (vm.graph.health.backgroundSupported()) {
+                                if (permissionStates.background.allowed) context.startActivity(Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS))
+                                else healthPermissions.launch(HealthCollector.permissions + HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
+                            } else vm.message.value = "이 기기는 백그라운드 건강 읽기를 지원하지 않아요"
+                        }
+                    }
+                    SettingsCard("수집 상태", "REFRESH") {
+                        Text("일정: 최근 30일~향후 90일 · 건강: 최근 29일\n약 6시간 간격 및 앱 복귀 시 갱신해요. 정상 수집 후 5분 이내 복귀는 생략하며 OS에 따라 실행이 늦어질 수 있어요.", style = MaterialTheme.typography.bodySmall)
+                        states.entries.forEachIndexed { index, (source, state) ->
+                            if (index > 0) HorizontalDivider()
+                            Text(sourceLabel(source), style = MaterialTheme.typography.labelLarge)
+                            Text(state, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    }
+                    if (settingsPage == SettingsPage.HOME_APPS) HomeAppLinkSettings(appLinks, appLinkRevision) { type -> launchAfterPick = false; appPicker = type }
+                    if (settingsPage == SettingsPage.NOTIFICATIONS) SettingsCard("알림 분류 및 보관", "NOTIFICATION") {
+                        SettingsMenuRow("알림 분류 규칙", "규칙 추가 · 수정 · 순서 · 예시 테스트", "NOTIFICATION", !busy) { showParserRules = true }
+                        HorizontalDivider()
+                        Text("광고 14일 · 기타 30일 후 자동 삭제", style = MaterialTheme.typography.titleSmall)
+                        Text("현재 보관 기간은 고정이에요. 알림 발생 시각 기준으로 원본도 함께 삭제해요. 수집 중지 중에도 앱 실행 또는 약 6시간마다 정리하며 OS에 따라 실행이 늦어질 수 있어요.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (settingsPage == SettingsPage.DATA) SettingsCard("데이터 관리", "TIMELINE") {
+                        OutlinedButton(onClick = { vm.work { vm.graph.reprocess() } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("저장된 원본 다시 분석") }
+                        OutlinedButton(onClick = { deleteConfirm = true }, enabled = !busy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("모든 로컬 데이터 삭제") }
+                    }
+                    if (settingsPage == SettingsPage.ABOUT) SettingsCard("앱 정보", "SETTINGS") {
+                        Text("Life Dashboard · ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
+                        OutlinedButton(onClick = { showUpdates = true }, modifier = Modifier.fillMaxWidth()) { Text("앱 업데이트") }
+                    }
+                } }
             }
         }
     }

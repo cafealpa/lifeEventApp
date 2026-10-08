@@ -240,3 +240,15 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 ## 2026-10-08 — v0.5.0 공개 릴리즈 검증
 
 `scripts/release.ps1 -Publish` 성공. 76개 테스트 통과, Release lint 오류 0/경고 39, 기존 서명·패키지·버전·non-debuggable 확인. cf3c67b 소스와 v0.5.0 태그/정식 latest 게시. 공개 APK 25,682,932 bytes, SHA-256 a4db5f4dd112b2cf88433a866eb66edc39c018d8cd7707d91b7a31c1a1038055. 인증 없는 재다운로드/메타데이터/GitHub digest/SHA256SUMS.txt 일치 확인. 실제 단말 설치 및 실행 검증은 미수행.
+
+## 2026-10-08 — 오늘 브리핑 v2 검증
+
+전체 테스트 78개와 assembleDebug/lintDebug 성공, diff 검사 통과. TodayBriefingTest에서 일정 시작/진행/종료 경계, 시간대 인사, 오늘 활동/결제 순액/배송 알림 수·상태, 건강 기록 미확인을 검증했다. 기존 일정 중복 및 RefreshPolicyTest를 v2 브리핑 기준으로 갱신했으며, 저장 시각만 바뀌는 결제 메타데이터는 재생성을 유발하지 않는지 확인했다. 실제 단말 시각 레이아웃 및 분 단위 UI 갱신/공개 릴리즈 미수행.
+
+## 2026-10-08 — 요약 메뉴형 설정 검증
+
+JDK `C:/Users/cafea/.jdks/openjdk-21.0.2`에서 `./gradlew.bat :app:assembleDebug :app:lintDebug --console=plain` 성공(34초). lint 오류 0/경고 41. `git diff --check` 통과. 변경은 화면 구성과 탐색이며 추가 단위 테스트/기존 단위 테스트 재실행은 하지 않았다. `adb devices -l` 결과 연결 기기 없음. 실제 렌더링/큰 글꼴/권한 복귀/뒤로가기 조작 및 공개 릴리즈는 미수행. APK는 `app/build/outputs/apk/debug/app-debug.apk`.
+
+## 2026-10-08 — v0.6.0 로컬 릴리즈 검증
+
+JDK 21에서 `scripts/release.ps1` 성공(Gradle 1분 54초). 단위 테스트 78개 통과(실패/오류 0), Release lint/build 성공, 기존 인증서/패키지/버전 0.6.0(7)/non-debuggable 검증 통과. 배포 산출물은 release-output/v0.6.0의 LifeDashboard.apk/update.json/SHA256SUMS.txt다. 실기기 미검증. 공개 재다운로드 검증은 사용자 명시 요청으로 생략한다.

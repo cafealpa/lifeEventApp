@@ -67,7 +67,7 @@ class HomeAppLinks(private val context: Context) {
 
 @Composable
 fun HomeAppLinkSettings(links: HomeAppLinks, revision: Int, onChoose: (String) -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("홈 카드 연결 앱", style = MaterialTheme.typography.titleMedium)
             Text("카드를 누르면 선택한 앱을 열어요. 데이터 수집 설정은 그대로 유지돼요.", style = MaterialTheme.typography.bodySmall)

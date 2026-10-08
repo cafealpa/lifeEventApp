@@ -23,19 +23,19 @@ class RefreshPolicyTest {
     @Before fun setup() { db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LifeDatabase::class.java).allowMainThreadQueries().build(); repo = LifeRepository(db) }
     @After fun close() { db.close() }
     private fun payload(text: String) = JSONObject().put("title", "알림").put("text", text)
-    private suspend fun derive() { repo.rebuildSummaries(zone,day); repo.generateBriefing(day,zone) }
+    private suspend fun derive() { repo.rebuildSummaries(zone,day); repo.generateBriefing(day,zone,time) }
     @Test fun unrelatedNotificationsAndMetadataDoNotInvalidateButPaymentAmountDoes() = runBlocking {
         derive()
         repo.ingest("NOTIFICATION","ad",time,payload("(광고) 안내"))
         repo.ingest("NOTIFICATION","other",time,payload("일반 안내"))
-        assertFalse(repo.needsDerivation(zone,day))
+        assertFalse(repo.needsDerivation(zone,day,time))
         repo.ingest("NOTIFICATION","payment",time,payload("결제 완료 1000원"))
-        assertTrue(repo.needsDerivation(zone,day))
+        assertTrue(repo.needsDerivation(zone,day,time))
         derive()
         repo.ingest("NOTIFICATION","payment",time,payload("결제 완료 1000원\n추가 안내"))
-        assertFalse(repo.needsDerivation(zone,day))
+        assertFalse(repo.needsDerivation(zone,day,time))
         repo.ingest("NOTIFICATION","payment",time,payload("결제 완료 2000원"))
-        assertTrue(repo.needsDerivation(zone,day))
+        assertTrue(repo.needsDerivation(zone,day,time))
         derive()
         assertEquals(2000,db.dao().summariesOnce().first { it.date == day.toString() }.paymentAmount)
     }
@@ -43,17 +43,17 @@ class RefreshPolicyTest {
         val event=repo.ingest("NOTIFICATION","payment",time,payload("결제 완료 1000원"))
         derive()
         repo.classifyNotification(event.id,"ADVERTISEMENT")
-        assertTrue(repo.needsDerivation(zone,day))
+        assertTrue(repo.needsDerivation(zone,day,time))
         derive()
         assertEquals(0,db.dao().summariesOnce().first { it.date == day.toString() }.paymentCount)
-        assertFalse(repo.needsDerivation(zone,day))
+        assertFalse(repo.needsDerivation(zone,day,time))
     }
     @Test fun missingBriefingNewDayAndTimezoneStillNeedDerivation() = runBlocking {
-        assertTrue(repo.needsDerivation(zone,day))
+        assertTrue(repo.needsDerivation(zone,day,time))
         repo.rebuildSummaries(zone,day)
-        assertTrue(repo.needsDerivation(zone,day))
-        repo.generateBriefing(day,zone)
-        assertFalse(repo.needsDerivation(zone,day))
+        assertTrue(repo.needsDerivation(zone,day,time))
+        repo.generateBriefing(day,zone,time)
+        assertFalse(repo.needsDerivation(zone,day,time))
         assertTrue(repo.needsDerivation(zone,day.plusDays(1)))
         assertTrue(repo.needsDerivation(ZoneId.of(if(zone.id == "UTC") "Asia/Seoul" else "UTC"),day))
     }
