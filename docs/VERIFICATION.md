@@ -264,3 +264,7 @@ JDK 21에서 `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assem
 ## 2026-10-08 — v0.7.0 로컬 릴리즈 검증
 
 JDK 21에서 scripts/release.ps1 성공(Gradle 1분 16초). 단위 테스트/Release lint/build 및 기존 인증서·패키지·버전 0.7.0(8)·non-debuggable 검증 통과. 배포 파일은 release-output/v0.7.0에 생성했다. 사용자 요청으로 공개 APK 재다운로드는 생략한다. 단말 검증은 미수행.
+
+### v0.7.0 게시 결과
+
+79개 테스트 통과, Release lint 오류 0/경고 41. 소스 태그 b48c3d5 및 정식/latest v0.7.0 게시 완료. GitHub API 응답으로 공개 상태와 3개 자산 업로드 확인, APK digest 및 로컬 SHA-256 일치. 사용자 요청대로 재다운로드 검증은 미수행.

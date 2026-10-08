@@ -431,3 +431,12 @@ AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 
 ## 2026-10-08 — v0.7.0 릴리즈 준비
 
 사용자의 배포 승인으로 홈 카드 통합 및 브리핑 제거 변경을 v0.7.0(versionCode 8)에 포함한다. 기존 공개 cafealpa/lifeEventApp에 소스·태그·APK·업데이트 메타데이터·체크섬을 게시한다. 기존 서명/DB 유지, 사용자 요청대로 공개 APK 재다운로드 검증 생략. 실기기 검증은 미수행이며 문제 발생 시 더 높은 버전 코드의 수정판으로 대응한다.
+
+## 2026-10-08 — v0.7.0 공개 배포 완료
+
+- https://github.com/cafealpa/lifeEventApp/releases/tag/v0.7.0 정식/latest 게시 완료. 소스 태그 b48c3d5, versionCode 8.
+- 홈 카드 색상/상세 통합 및 브리핑 UI/생성/예약 제거 포함. 기존 서명·DB 및 과거 브리핑 행 보존.
+- 테스트 79개 통과(실패/오류 0), Release lint 오류 0/경고 41, 빌드·인증서·패키지·버전·non-debuggable 검사 통과.
+- 소스/main/tag 및 APK/update.json/SHA256SUMS.txt 게시, draft=false/prerelease=false와 자산 uploaded 확인.
+- APK 25,715,812 bytes, SHA-256 c289afe1efa79979d4c0a1598c6d0c4c80280cdf684993a8697847c953dda362. GitHub digest와 로컬 값 일치. 재다운로드 검증은 사용자 요청으로 생략.
+- 실기기 설치/화면/이전 예약 취소 검증은 미수행. 앞선 미배포 표시는 당시 상태이며 이번 배포에 포함됐다.
