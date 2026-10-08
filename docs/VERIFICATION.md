@@ -212,3 +212,7 @@ APK SHA-256: `7b008ed283a4ccc952523fd04a707653d74436047dc995623ba88abc1cffb560`.
 - 신규 경고는 HomeAppLinks의 SharedPreferences.edit KTX 사용 제안이며 기능 오류가 아니다.
 - 기존 고정 인증서 SHA-256 일치, 패키지 com.lifedashboard/versionCode 5/versionName 0.4.0 및 non-debuggable 검사 통과.
 - `git diff --check` 통과. 실제 API 35 이상 단말 설치/외부 앱 실행/화면 동작은 미검증.
+
+### v0.4.0 공개 검증
+
+`scripts/release.ps1 -Publish` 성공. 소스 5887392 및 v0.4.0 태그 게시, 정식/latest 공개 확인. verify-release.ps1이 인증 없는 APK 재다운로드와 크기/SHA-256/메타데이터/GitHub digest를 검증했고 공개 SHA256SUMS.txt도 추가 대조했다. 최종 APK: 25,502,712 bytes, eca7f7cdd4c9e29105367a7f579e97e754e6f2393c60158acd611241610547f7. 실기기 설치/외부 앱 실행 미검증.
