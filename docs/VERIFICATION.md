@@ -332,3 +332,7 @@ JDK 21에서 두 프로젝트 각각 다음 작업을 실행했다.
 - 기존 인증서·패키지·버전 0.8.1(10)·디버깅 비활성 확인. DB schema v1 유지.
 - APK release-output/v0.8.1/LifeDashboard.apk: 26,027,376 bytes; SHA-256 5e7367c4eae0e9deefbfe008d70b58da05a2daf506d6cda859f406ac1b2ad1a5.
 - 공개 APK 재다운로드는 기존 요청대로 생략하고 게시 후 메타데이터/체크섬/GitHub digest로 검증한다. 실제 폰 설치와 새 진단 화면 조작/오류 재현은 미수행.
+
+### v0.8.1 공개 검증 완료
+
+정식/latest v0.8.1(소스 태그 91a20ca), versionCode 10 게시 완료. 인증 없는 GitHub API로 draft=false/prerelease=false/자산 uploaded 확인, 공개 update.json 전 필드 및 SHA256SUMS와 로컬 파일/GitHub APK digest·크기 대조 통과. 기존 요청대로 공개 APK 재다운로드 생략. 실기기 설치/진단 UI/실제 오류 재현은 미수행.
