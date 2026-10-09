@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -32,30 +31,11 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val Teal = Color(0xFF007F7A)
-private val Ink = Color(0xFF172B3A)
-private val Muted = Color(0xFF627580)
-private val Mist = Color(0xFFE2F2EF)
-private val Paper = Color(0xFFF6F8F6)
 private val DayFormat = DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREAN)
-
-@Composable
-fun LifeTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = lightColorScheme(primary = Teal, onPrimary = Color.White,
-            primaryContainer = Mist, onPrimaryContainer = Color(0xFF005B57),
-            secondary = Muted, secondaryContainer = Mist, onSecondaryContainer = Teal,
-            background = Paper, onBackground = Ink, surface = Color.White, onSurface = Ink,
-            surfaceVariant = Color(0xFFEDF2EF), onSurfaceVariant = Muted,
-            outline = Color(0xFF788B8A), outlineVariant = Color(0xFFDCE5E0)),
-        shapes = Shapes(small = RoundedCornerShape(12.dp), medium = RoundedCornerShape(18.dp), large = RoundedCornerShape(24.dp)),
-        content = content
-    )
-}
 
 // Small shared line icons keep the UI consistent without a large icon dependency.
 @Composable
-fun LifeIcon(kind: String, modifier: Modifier = Modifier, tint: Color = Teal) {
+fun LifeIcon(kind: String, modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.primary) {
     Canvas(modifier.size(24.dp)) {
         scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) {
             fun line(vararg points: Float) {
@@ -64,6 +44,7 @@ fun LifeIcon(kind: String, modifier: Modifier = Modifier, tint: Color = Teal) {
             }
             fun circle(x: Float, y: Float, r: Float) = drawCircle(tint, r, Offset(x,y), style = Stroke(1.7f))
             when (kind) {
+                "PLACE_VISIT" -> { circle(12f,9f,5f); line(8f,13f,12f,21f,16f,13f); circle(12f,9f,1.5f) }
                 "HOME" -> { line(3f,11f,12f,3f,21f,11f); line(5f,10f,5f,21f,10f,21f,10f,15f,14f,15f,14f,21f,19f,21f,19f,10f) }
                 "CALENDAR", "RESERVATION" -> { line(4f,6f,20f,6f,20f,21f,4f,21f,4f,6f); line(8f,3f,8f,8f); line(16f,3f,16f,8f); line(4f,11f,20f,11f); line(8f,15f,11f,15f) }
                 "PAYMENT" -> { line(3f,5f,21f,5f,21f,19f,3f,19f,3f,5f); line(3f,10f,21f,10f); line(7f,15f,11f,15f) }
@@ -100,14 +81,14 @@ fun LifeIcon(kind: String, modifier: Modifier = Modifier, tint: Color = Teal) {
 @Composable
 fun LifeIconButton(kind: String, label: String, enabled: Boolean = true, onClick: () -> Unit) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.semantics { contentDescription = label }) {
-        LifeIcon(kind, tint = if (enabled) Teal else Muted.copy(alpha = 0.4f))
+        LifeIcon(kind, tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
     }
 }
 
 @Composable
 private fun IconTile(type: String) {
-    val color = when(type) { "PAYMENT" -> Color(0xFFB86725); "CALENDAR", "RESERVATION" -> Color(0xFF3E75B4); else -> Teal }
-    Box(Modifier.size(40.dp).background(color.copy(alpha = 0.09f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { LifeIcon(type, tint = color) }
+    val colors = MaterialTheme.colorScheme
+    Box(Modifier.size(40.dp).background(colors.primaryContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { LifeIcon(type, tint = colors.onPrimaryContainer) }
 }
 
 @Composable
@@ -119,86 +100,34 @@ private fun SectionTitle(title: String, action: String = "전체 보기", onClic
 }
 
 @Composable
-private fun StatCard(title: String, value: String, type: String, note: String, modifier: Modifier, onClick: () -> Unit) {
-    val accent = when (type) {
-        "CALENDAR", "SLEEP" -> Color(0xFF6456AD)
-        "PAYMENT" -> Color(0xFFA44C20)
-        "DELIVERY", "RESERVATION" -> Color(0xFF2863AA)
-        else -> Teal
-    }
-    Card(onClick, modifier, shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-        Column(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(accent.copy(alpha = 0.12f), Color(0xFFF1F5FA)))).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+internal fun StatCard(title: String, value: String, type: String, note: String, modifier: Modifier, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val featured = type == "CALENDAR"
+    Card(onClick, modifier, shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = if (featured) colors.primaryContainer else colors.surface, contentColor = colors.onSurface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (featured) colors.primaryContainer else colors.outlineVariant)) {
+        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LifeIcon(type, tint = accent); Text(title, style = MaterialTheme.typography.labelLarge)
+                LifeIcon(type, tint = colors.primary); Text(title, style = MaterialTheme.typography.labelLarge)
             }
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = accent)
-            Text(note, style = MaterialTheme.typography.bodySmall, color = Ink)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (featured) colors.onPrimaryContainer else colors.onSurface)
+            Text(note, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun SummaryRow(type: String, title: String, subtitle: String, onClick: () -> Unit) {
+internal fun SummaryRow(type: String, title: String, subtitle: String, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         IconTile(type)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        LifeIcon("NEXT", Modifier.size(16.dp), Muted)
+        LifeIcon("NEXT", Modifier.size(16.dp), MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-@Composable
-fun DashboardContent(summaries: List<DailySummary>, schedules: List<LifeEvent>, notifications: List<LifeEvent>, states: Map<String,String>, onLaunchApp: (String) -> Unit, onSelect: (String, LocalDate) -> Unit, onInbox: () -> Unit, onOpen: (LifeEvent) -> Unit) {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(30_000) } }
-    val today = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate()
-    val current = summaries.find { it.date == today.toString() }
-    val healthNote = if (states["HEALTH_CONNECT"]?.startsWith("수집 완료") == true) "저장된 건강 기록" else "최신 수집 미확인"
-    val calendarNote = if (states["CALENDAR"]?.startsWith("수집 완료") == true) "오늘의 저장 일정" else "최신 수집 미확인"
-    val scheduleNote = HomeCardDetails.schedule(schedules, now, ZoneId.systemDefault()) + "\n$calendarNote"
-    val latestPayment = notifications.firstOrNull { it.type == "PAYMENT" }
-    val latestReservation = notifications.firstOrNull { it.type == "RESERVATION" }
-    LazyColumn(contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("오늘 일정", current?.let { "${it.calendarCount}개" } ?: "집계 대기", "CALENDAR", scheduleNote, Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("CALENDAR") }
-                StatCard("오늘 종료된 수면", current?.sleepMinutes?.let { "${it / 60}시간 ${it % 60}분" } ?: "기록 없음", "SLEEP", "오늘 종료된 수면 기록 기준\n$healthNote", Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("SLEEP") }
-            }
-        }
-        item {
-            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("오늘 걸음수", current?.stepCount?.let { "${String.format(Locale.KOREAN,"%,d",it)}보" } ?: "기록 없음", "STEP_SUMMARY", "오늘 누적 걸음수\n$healthNote", Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("STEP_SUMMARY") }
-                StatCard("오늘 운동", current?.exerciseMinutes?.let { "${it}분" } ?: "기록 없음", "EXERCISE", "오늘 기록된 운동 시간\n$healthNote", Modifier.weight(1f).fillMaxHeight()) { onLaunchApp("EXERCISE") }
-            }
-        }
-        item {
-            SectionTitle("오늘 일정") { onSelect("CALENDAR",today) }
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0EDFA))) {
-                if (schedules.isEmpty()) Text("저장된 일정이 없어요.\n$calendarNote", Modifier.fillMaxWidth().padding(20.dp), color = Muted)
-                schedules.take(3).forEachIndexed { index, event ->
-                    if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Paper)
-                    SummaryRow("CALENDAR", "${eventTime(event)}  ${event.title}", event.summary.orEmpty()) { onOpen(event) }
-                }
-                TextButton(onClick = { onSelect("CALENDAR",today.plusDays(1)) }, modifier = Modifier.align(Alignment.End)) { Text("내일 일정 보기 ›") }
-            }
-        }
-        item {
-            SectionTitle("생활 알림", "알림 보관함") { onInbox() }
-        }
-        item {
-            StatCard("오늘 결제", current?.let { "${String.format(Locale.KOREAN,"%,d",it.paymentAmount)}원" } ?: "집계 대기", "PAYMENT",
-                current?.let { "결제·취소 알림 ${it.paymentCount}건\n" + (latestPayment?.let { event -> "최근 · ${event.title}" } ?: "저장된 결제 알림 없음") } ?: "저장된 결제 기록을 확인하고 있어요", Modifier.fillMaxWidth()) { onSelect("PAYMENT",today) }
-        }
-        item {
-            StatCard("오늘 배송 알림", current?.let { "${it.deliveryCount}건" } ?: "집계 대기", "DELIVERY", HomeCardDetails.delivery(notifications) + "\n건수는 물품 수가 아닌 알림 수예요", Modifier.fillMaxWidth()) { onSelect("DELIVERY",today) }
-        }
-        item {
-            StatCard("오늘 예약 알림", current?.let { "${it.reservationCount}건" } ?: "집계 대기", "RESERVATION", latestReservation?.let { "최근 · ${it.title}\n${it.summary.orEmpty()}" } ?: "저장된 예약 알림 없음", Modifier.fillMaxWidth()) { onSelect("RESERVATION",today) }
-        }
-    }
-}
 
 fun eventTime(event: LifeEvent): String = if (event.calendarDate != null) "종일" else Instant.ofEpochMilli(if (event.type == "SLEEP") event.endedAt ?: event.occurredAt else event.occurredAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
 
@@ -207,13 +136,14 @@ private fun eventStatus(status: String) = when(status) { "ACTIVE" -> ""; "CANCEL
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineContent(events: List<LifeEvent>, query: TimelineQuery, onQuery: (TimelineQuery) -> Unit, onOpen: (LifeEvent) -> Unit) {
+    val colors = MaterialTheme.colorScheme
     var pickDate by remember { mutableStateOf(false) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(query.date,query.type,query.inbox,query.oldestFirst) { listState.scrollToItem(0) }
     Column {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("" to "전체", "CALENDAR" to "일정", "HEALTH" to "건강", "PAYMENT" to "결제", "DELIVERY" to "배송", "RESERVATION" to "예약", "ADVERTISEMENT" to "광고", "SLEEP" to "수면", "STEP_SUMMARY" to "걸음", "EXERCISE" to "운동", "NOTIFICATION" to "기타").forEach { (type,label) ->
-                FilterChip(query.type == type, { onQuery(query.copy(type = type,limit = 100)) }, label = { Text(label) }, shape = RoundedCornerShape(50), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Teal, selectedLabelColor = Color.White))
+            listOf("" to "전체", "CALENDAR" to "일정", "HEALTH" to "건강", "PAYMENT" to "결제", "DELIVERY" to "배송", "RESERVATION" to "예약", "PLACE_VISIT" to "방문", "ADVERTISEMENT" to "광고", "SLEEP" to "수면", "STEP_SUMMARY" to "걸음", "EXERCISE" to "운동", "NOTIFICATION" to "기타").forEach { (type,label) ->
+                FilterChip(query.type == type, { onQuery(query.copy(type = type,limit = 100)) }, label = { Text(label) }, shape = RoundedCornerShape(50), colors = FilterChipDefaults.filterChipColors(selectedContainerColor = colors.primary, selectedLabelColor = colors.onPrimary))
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -225,39 +155,39 @@ fun TimelineContent(events: List<LifeEvent>, query: TimelineQuery, onQuery: (Tim
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { onQuery(query.copy(oldestFirst = !query.oldestFirst, limit = 100)) }) {
-                Text("${events.size}${if (events.size >= query.limit) "+" else ""}건 · ${if (query.oldestFirst) "시간순" else "최신순"}", style = MaterialTheme.typography.labelMedium, color = Muted)
+                Text("${events.size}${if (events.size >= query.limit) "+" else ""}건 · ${if (query.oldestFirst) "시간순" else "최신순"}", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
             }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { onQuery(query.copy(date = LocalDate.now(),limit = 100)) }) { Text("오늘") }
         }
         LazyColumn(modifier = Modifier.weight(1f), state = listState, contentPadding = PaddingValues(start = 20.dp,end = 20.dp,bottom = 24.dp)) {
             if (events.isEmpty()) item {
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(colors = CardDefaults.cardColors(containerColor = colors.surface)) {
                     Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         LifeIcon(if (query.inbox) "NOTIFICATION" else "TIMELINE",Modifier.size(32.dp))
                         Text("이 날짜에 저장된 기록이 없어요.", style = MaterialTheme.typography.titleSmall)
-                        Text("다른 날짜나 분류를 선택해 보세요.\n수집 권한과 상태는 설정에서 확인할 수 있어요.", style = MaterialTheme.typography.bodySmall, color = Muted)
+                        Text("다른 날짜나 분류를 선택해 보세요.\n수집 권한과 상태는 설정에서 확인할 수 있어요.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     }
                 }
             }
             itemsIndexed(events, key = { _,event -> event.id }) { index,event ->
                 val shape = RoundedCornerShape(topStart = if (index == 0) 18.dp else 0.dp, topEnd = if(index == 0) 18.dp else 0.dp, bottomStart = if(index == events.lastIndex) 18.dp else 0.dp,bottomEnd = if(index == events.lastIndex) 18.dp else 0.dp)
-                Row(Modifier.fillMaxWidth().background(Color.White,shape).clickable { onOpen(event) }.height(IntrinsicSize.Min).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(eventTime(event), Modifier.width(43.dp).padding(top = 24.dp), style = MaterialTheme.typography.labelMedium, color = Muted)
+                Row(Modifier.fillMaxWidth().background(colors.surface,shape).clickable { onOpen(event) }.height(IntrinsicSize.Min).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(eventTime(event), Modifier.width(43.dp).padding(top = 24.dp), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                     Canvas(Modifier.width(8.dp).fillMaxHeight()) {
                         val center = 30.dp.toPx()
-                        drawLine(Mist,Offset(size.width / 2,if(index == 0) center else 0f),Offset(size.width / 2,if(index == events.lastIndex) center else size.height),2.dp.toPx())
-                        drawCircle(Teal.copy(alpha = 0.5f),3.dp.toPx(),Offset(size.width / 2,center))
+                        drawLine(colors.outlineVariant,Offset(size.width / 2,if(index == 0) center else 0f),Offset(size.width / 2,if(index == events.lastIndex) center else size.height),2.dp.toPx())
+                        drawCircle(colors.primary.copy(alpha = 0.5f),3.dp.toPx(),Offset(size.width / 2,center))
                     }
                     Row(Modifier.weight(1f).padding(vertical = 18.dp), verticalAlignment = Alignment.CenterVertically,horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         IconTile(event.type)
                         Column(Modifier.weight(1f),verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,maxLines = 2,overflow = TextOverflow.Ellipsis)
-                            if (!event.summary.isNullOrBlank()) Text(event.summary,style = MaterialTheme.typography.bodySmall,color = Muted,maxLines = 2,overflow = TextOverflow.Ellipsis)
+                            if (!event.summary.isNullOrBlank()) Text(event.summary,style = MaterialTheme.typography.bodySmall,color = colors.onSurfaceVariant,maxLines = 2,overflow = TextOverflow.Ellipsis)
                             val status = eventStatus(event.status)
                             if(status.isNotEmpty()) Text(status,style = MaterialTheme.typography.labelSmall,color = MaterialTheme.colorScheme.error)
                         }
-                        LifeIcon("NEXT",Modifier.size(14.dp),Muted)
+                        LifeIcon("NEXT",Modifier.size(14.dp),colors.onSurfaceVariant)
                     }
                 }
             }

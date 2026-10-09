@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 class CollectionStatus(context: Context) {
     private val prefs = context.getSharedPreferences("collection", Context.MODE_PRIVATE)
     val states = MutableStateFlow(read())
-    private fun read() = listOf("CALENDAR", "HEALTH_CONNECT", "NOTIFICATION", "PROCESSING").associateWith {
+    private fun read() = listOf("CALENDAR", "HEALTH_CONNECT", "NOTIFICATION", "SPOTTRACE", "PROCESSING").associateWith {
         prefs.getString(it, "미수집")!! + prefs.getLong("${it}_last", 0).takeIf { time -> time > 0 }?.let { time -> "\n마지막 성공: ${java.time.Instant.ofEpochMilli(time).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()}" }.orEmpty()
     }
     fun set(source: String, state: String) { prefs.edit().putString(source, state).apply(); states.value = read() }
@@ -26,11 +26,14 @@ class CollectionStatus(context: Context) {
 class AppGraph(val context: Context) {
     val parserRules = ParserRuleStore(context)
     val repository = LifeRepository(LifeDatabase.create(context)) { parserRules.state.value }
+    val cards = DashboardCardStore(context)
+    val cardQueries = DashboardQueryRepository(repository.dao)
     val status = CollectionStatus(context)
     private val aggregationState = MutableStateFlow(false)
     val aggregating = aggregationState.asStateFlow()
     val calendar = CalendarCollector(context, repository)
     val health = HealthCollector(context, repository)
+    val spotTrace = SpotTraceCollector(context, repository)
     private val syncMutex = Mutex()
     private val notificationMutex = Mutex()
     private val resumeGate = ResumeRefreshGate()
@@ -54,6 +57,7 @@ class AppGraph(val context: Context) {
         val recoveryFailures = repository.recoverPending()
         run("CALENDAR") { calendar.collect() }
         run("HEALTH_CONNECT") { health.collect(background) }
+        if(spotTrace.enabled()) run("SPOTTRACE") { spotTrace.collect() } else status.set("SPOTTRACE","연동 꺼짐")
         if (status.states.value.getValue("HEALTH_CONNECT").startsWith("수집 완료") && context.getSharedPreferences("health-sync", Context.MODE_PRIVATE).getBoolean("historyGap", false)) {
             status.set("HEALTH_CONNECT", "최근 29일 갱신 · 변경 토큰 만료로 이전 기록의 변경 여부는 미확인")
         }
@@ -62,6 +66,11 @@ class AppGraph(val context: Context) {
         if (recoveryFailures > 0) status.set("PROCESSING", "집계 완료 · 분석 실패 원본 ${recoveryFailures}건 보존 중")
     }
     suspend fun purgeExpiredNotifications() = syncMutex.withLock { repository.purgeExpiredNotifications() }
+    suspend fun setSpotTraceEnabled(value: Boolean) = syncMutex.withLock {
+        spotTrace.enable(value)
+        status.set("SPOTTRACE",if(value) "연동 켜짐 · 새로고침 필요" else "연동 꺼짐 · 저장 기록 유지")
+    }
+    suspend fun reconnectSpotTrace() = syncMutex.withLock { spotTrace.allowNewDataset();status.set("SPOTTRACE","새 데이터 연결 대기 · 새로고침 필요") }
     fun scheduleRetention() {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork("life-retention", ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<NotificationRetentionWorker>(6, TimeUnit.HOURS).build())
@@ -109,6 +118,7 @@ class AppGraph(val context: Context) {
         repository.clear()
         context.getSharedPreferences("health-sync", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("notification-active", Context.MODE_PRIVATE).edit().clear().commit()
+        spotTrace.clear()
         status.clear()
     } }
     fun schedule() {

@@ -272,3 +272,45 @@ JDK 21에서 scripts/release.ps1 성공(Gradle 1분 16초). 단위 테스트/Rel
 ## 2026-10-08 — 알림 개별 삭제 검증
 
 JDK 21에서 `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --console=plain` 성공(35초). NotificationDeletionTest 4개로 원본 전체 이력/태그/엔티티 삭제, 다른 알림 보존, 재분석 비복원, 결제 취소 삭제 후 순합계, 수동 분류별 삭제, Calendar 보호를 확인했다. diff 검사 통과. 실제 단말 UI/알림 재전달 경계 및 공개 배포는 미수행.
+
+## 2026-10-08 — 화면 테마 검증
+
+- JDK `C:/Users/cafea/.jdks/openjdk-21.0.2`에서 `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --console=plain` 최종 성공(25초).
+- 전체 102개 테스트, 실패/오류 0. ThemePreferencesTest 3개에서 6개 테마 저장/복원·잘못된 ID 기본 복원, 배경과 글자 조합 4.5:1 이상 대비, 저장 테마에 맞는 Activity 시스템 표시줄 아이콘을 확인했다. 최초 대비 실패 후 일부 글자 색을 보정하고 전체 검증을 재실행했다.
+- Debug APK 생성 성공, lint 오류 0/경고 50, `git diff --check` 통과. 보고서는 app/build/reports/tests/testDebugUnitTest/index.html 및 app/build/reports/lint-results-debug.html. 테마 소스의 신규 경고 2개는 SharedPreferences.edit 및 ColorDrawable을 KTX로 쓰라는 스타일 권고다.
+- 연결 에뮬레이터 emulator-5554는 API 34이며 앱 minSdk 35 미충족. 실제 Compose 렌더링/테마 전환 터치/프로세스 재시작/글꼴 확대/키보드/설치 검증은 미수행. 공개 배포 및 앱 버전 변경 없음.
+
+## 2026-10-08 — SpotTrace 연동 및 커스텀 대시보드 검증
+
+JDK 21에서 두 프로젝트 각각 다음 작업을 실행했다.
+
+```powershell
+./gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --console=plain
+```
+
+- Life Dashboard: 카드/방문 테스트 추가 후 99개 통과. 동시 진행된 테마 테스트 3개를 포함한 최종 상태는 102개 통과, 실패/오류/건너뜀 0. lint 오류 0/경고 50.
+- SpotTrace: 40개 통과, 실패/오류/건너뜀 0. lint 오류 0/경고 95/Hint 1. 기존 경고와 SharedPreferences KTX 권고는 유지한다.
+- Life Dashboard 신규 DashboardCardsTest 10개: 카드 JSON/빈 홈/ID, 결제 조건과 취소, 방문 지표 구분/다른 장소 미결합, 과거 이름 포함 옵션, 수면 겹침과 평균 분모, 운동 자정 분할, 기간 경계, 삭제 및 알림 중복 제외.
+- Life Dashboard 신규 SpotTraceIntegrationTest 6개: 중복 수집과 Raw 보존/재분석 비부활, 데이터셋/ID 재사용, 중단·중복 스냅샷 거부, 실패 시 기존 이벤트 보존, 가맹점만 변경되는 카드 갱신, 카드 제거의 생활 데이터 비삭제.
+- SpotTrace 신규 IntegrationDatabaseTest 3개: 실제 Robolectric API 35 Room/SQLite migration v7→v8 보존과 재개방 datasetId 유지, 스냅샷 완료·개수·삭제 반영, 비허용 호출 및 외부 쓰기 거부. 기존 Android migration 테스트를 6→7→8로 확장했으며 실행 대신 계측 APK 빌드까지만 확인했다.
+- 중간 통합 검증에서 별도 진행 중인 테마의 대비 테스트 1개 및 lint 내부 AsyncExecutionService 예외가 발생했다. 이후 테마 수정 반영 상태에서 동일 작업을 `--no-daemon --max-workers=2`로 다시 실행해 성공했다. 검사를 끄거나 테스트를 제외하지 않았다.
+- 두 프로젝트 `git diff --check` 통과. CRLF 변환 안내는 공백 오류가 아니다.
+- API 35 이상 단말 연결 없음(`adb devices -l`), 설치된 에뮬레이터 이미지는 API 30/34. 따라서 두 앱 실제 Binder IPC/동의/설치 순서/백그라운드 및 UI 렌더링 검증은 미수행이다.
+
+현재 로컬 Debug 산출물(공개 배포/설치 아님):
+
+| 앱 | 경로 | 크기 | SHA-256 |
+|---|---|---:|---|
+| Life Dashboard | app/build/outputs/apk/debug/app-debug.apk | 33,591,204 | 08a766cdb52127edd5f702e3aa40242541569ba247fee62fa643c5c956ec570b |
+| SpotTrace | C:/Users/cafea/AndroidStudioProjects/SpotTrace/app/build/outputs/apk/debug/app-debug.apk | 25,165,880 | 1400b61e98610b8b1ddb1b25985cad392cd8b85ba7bedaa083b7f9f475319dc4 |
+
+`apksigner verify --print-certs`로 두 APK의 서명 검증 및 기존 공개 인증서 SHA-256 일치를 확인했다. 앱 버전은 기존값이며 릴리즈/업데이트 메타데이터를 게시하지 않았다. 같은 작업 폴더의 후속 빌드는 파일을 바꿀 수 있으므로 위 체크섬은 이 검증 시점의 산출물이다.
+
+## 2026-10-09 — v0.8.0 릴리즈 검증
+
+- 명령: JAVA_HOME=C:/Users/cafea/.jdks/openjdk-21.0.2 환경에서 `./scripts/release.ps1` 실행. 내부 `:app:testDebugUnitTest :app:lintRelease :app:assembleRelease --console=plain` 성공(2분 5초).
+- 단위 테스트 102개, 실패/오류 0. Release lint 오류 0/경고 50. `git diff --check` 통과.
+- 기존 인증서/패키지 com.lifedashboard/버전 0.8.0(9)/디버깅 비활성 검증 통과. DB schema v1 유지.
+- APK: release-output/v0.8.0/LifeDashboard.apk, 25,978,164 bytes; SHA-256 `3a0786b821e84c9a5f424c23353c501c6cb46fe1eebc739b2e2577bea6df3429`.
+- SpotTrace 연동/카드 편집/테마 및 v0.7.0 이후 알림 개별 삭제 포함. Health Connect 오류 수정/진단 UI는 미포함.
+- 실제 단말 설치/Provider IPC/화면 검증은 미수행. 게시 후 공개 메타데이터 및 GitHub digest를 확인하며 이전 사용자 요청에 따라 APK 재다운로드는 생략한다.

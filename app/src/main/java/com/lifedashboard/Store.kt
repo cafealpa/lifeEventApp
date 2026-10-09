@@ -25,6 +25,12 @@ data class DailySummary(@PrimaryKey val date: String, val stepCount: Long?, val 
 
 @Dao
 interface LifeDao {
+    @Query("SELECT * FROM life_event WHERE status='ACTIVE' AND type=:type AND ((calendarDate IS NOT NULL AND calendarDate>=:fromDate AND calendarDate<:untilDate) OR (calendarDate IS NULL AND ((type='SLEEP' AND endedAt>=:start AND endedAt<:end) OR (type='EXERCISE' AND occurredAt<:end AND endedAt>:start) OR (type NOT IN ('SLEEP','EXERCISE') AND occurredAt>=:start AND occurredAt<:end)))) ORDER BY occurredAt DESC,id DESC")
+    fun observeCardEvents(start: Long, end: Long, fromDate: String, untilDate: String, type: String): Flow<List<LifeEvent>>
+    @Query("SELECT * FROM life_event WHERE sourceType='SPOTTRACE' AND status='ACTIVE'")
+    suspend fun activeVisits(): List<LifeEvent>
+    @Query("SELECT DISTINCT json_extract(dataJson,'$.datasetId') AS datasetId, COALESCE(json_extract(dataJson,'$.placeId'),'') AS placeId, json_extract(dataJson,'$.placeName') AS name FROM life_event WHERE sourceType='SPOTTRACE' AND status='ACTIVE' ORDER BY name")
+    fun visitPlaces(): Flow<List<VisitPlace>>
     @Query("SELECT * FROM raw_event WHERE sourceType=:source AND sourceKey=:key ORDER BY revision DESC LIMIT 1")
     suspend fun latestRaw(source: String, key: String): RawEvent?
     @Insert suspend fun insertRaw(raw: RawEvent)

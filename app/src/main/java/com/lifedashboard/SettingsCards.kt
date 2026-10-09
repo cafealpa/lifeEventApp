@@ -19,9 +19,10 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlinx.coroutines.*
 
 enum class SettingsPage(val title: String, val description: String, val icon: String) {
-    COLLECTION("데이터 수집 및 권한", "일정 · 알림 · 건강", "HEALTH"),
-    HOME_APPS("홈 카드 연결 앱", "일정 · 수면 · 걸음수 · 운동", "HOME"),
+    COLLECTION("데이터 수집 및 권한", "일정 · 알림 · 건강 · SpotTrace", "HEALTH"),
+    HOME_APPS("홈 카드 및 연결 앱", "카드 편집 · 나만의 집계 · 앱 연결", "HOME"),
     NOTIFICATIONS("알림 분류 및 보관", "분류 규칙 · 자동 정리 기준", "NOTIFICATION"),
+    THEME("화면 테마", "6가지 색상 · 밝은 화면과 어두운 화면", "SETTINGS"),
     DATA("데이터 관리", "원본 다시 분석 · 전체 삭제", "TIMELINE"),
     ABOUT("앱 정보", "버전 · 앱 업데이트", "SETTINGS")
 }
@@ -61,12 +62,13 @@ fun SettingsOverview(enabled: Boolean, permissions: PermissionStates, states: Ma
             }
         }
     }
-    listOf("생활 데이터와 화면" to SettingsPage.entries.take(3), "관리" to SettingsPage.entries.drop(3)).forEach { (label, pages) ->
+    listOf("생활 데이터와 화면" to listOf(SettingsPage.COLLECTION, SettingsPage.HOME_APPS, SettingsPage.NOTIFICATIONS, SettingsPage.THEME),
+        "관리" to listOf(SettingsPage.DATA, SettingsPage.ABOUT)).forEach { (label, pages) ->
         Text(label, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
             pages.forEachIndexed { index, page ->
                 if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                SettingsMenuRow(page.title, page.description, page.icon) { onOpen(page) }
+                SettingsMenuRow(page.title, if (page == SettingsPage.THEME) "현재 · ${LocalAppTheme.current.title}" else page.description, page.icon) { onOpen(page) }
             }
         }
     }

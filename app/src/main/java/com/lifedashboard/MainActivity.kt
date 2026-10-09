@@ -5,7 +5,6 @@ import android.app.Application
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import androidx.core.view.WindowCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
@@ -40,6 +39,13 @@ data class EventDetail(val event: LifeEvent, val raw: RawEvent?, val tags: List<
 @OptIn(ExperimentalCoroutinesApi::class)
 class LifeViewModel(app: Application) : AndroidViewModel(app) {
     val graph = (app as LifeApplication).graph
+    private val cardFlows = mutableMapOf<Triple<CardQuery,LocalDate,ZoneId>, StateFlow<CardResult>>()
+    fun cardResults(query: CardQuery, today: LocalDate, zone: ZoneId): StateFlow<CardResult> {
+        cardFlows.keys.removeAll { it.second != today || it.third != zone }
+        val key=Triple(query,today,zone)
+        if(cardFlows.size>=40 && key !in cardFlows) cardFlows.clear()
+        return cardFlows.getOrPut(key) { graph.cardQueries.observe(query,today,zone).stateIn(viewModelScope,SharingStarted.WhileSubscribed(5_000),CardResult()) }
+    }
     val message = MutableStateFlow("")
     private fun <T> Flow<T>.reportReadFailure(): Flow<T> = catch { e ->
         if (e is CancellationException) throw e
@@ -99,24 +105,17 @@ class LifeViewModel(app: Application) : AndroidViewModel(app) {
     fun filter(type: String = "", inbox: Boolean = false, date: LocalDate = LocalDate.now()) { query.value = TimelineQuery(date, type, inbox, oldestFirst = query.value.oldestFirst) }
 }
 
-private fun ComponentActivity.configureSystemBars() {
-    WindowCompat.getInsetsController(window, window.decorView).apply {
-        isAppearanceLightStatusBars = true
-        isAppearanceLightNavigationBars = true
-    }
-}
-
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); configureSystemBars(); setContent { LifeTheme { LifeScreen() } } }
+    override fun onCreate(savedInstanceState: Bundle?) { prepareLifeTheme(); super.onCreate(savedInstanceState); setContent { LifeTheme { LifeScreen() } } }
 }
 class PrivacyActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        prepareLifeTheme()
         super.onCreate(savedInstanceState)
-        configureSystemBars()
         setContent { LifeTheme { Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column(Modifier.padding(20.dp)) { Text("생활 데이터 이용 안내", style = MaterialTheme.typography.headlineSmall); Text(PRIVACY); Button(onClick = { finish() }) { Text("닫기") } } } } }
     }
 }
-const val PRIVACY = "일정, 접근 가능한 알림 원문, 걸음·수면·운동 기록을 이 기기에 저장하고 Timeline과 요약에 사용해요. 생활 데이터의 서버 전송과 자동 백업은 하지 않아요. 업데이트 확인과 APK 다운로드에만 인터넷을 사용해요. 알림에는 결제 등 민감한 내용이 포함될 수 있어요. 권한은 기능별로 선택할 수 있고, 설정에서 수집 중지 및 저장 데이터 전체 삭제를 할 수 있어요. 수집 중단 이전의 알림 전체 복원은 지원하지 않아요. 건강 기록은 의료 판단에 사용하지 않아요."
+const val PRIVACY = "일정, 접근 가능한 알림 원문, 걸음·수면·운동 기록과 선택한 SpotTrace 방문 기록을 이 기기에 저장하고 Timeline과 요약에 사용해요. 생활 데이터의 서버 전송과 자동 백업은 하지 않아요. 업데이트 확인과 APK 다운로드에만 인터넷을 사용해요. 알림에는 결제 등 민감한 내용이 포함될 수 있어요. 권한은 기능별로 선택할 수 있고, 설정에서 수집 중지 및 저장 데이터 전체 삭제를 할 수 있어요. 수집 중단 이전의 알림 전체 복원은 지원하지 않아요. 건강 기록은 의료 판단에 사용하지 않아요."
 
 @Composable
 fun LifeScreen(vm: LifeViewModel = viewModel()) {
@@ -146,6 +145,10 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
     var appPicker by rememberSaveable { mutableStateOf<String?>(null) }
     var launchAfterPick by rememberSaveable { mutableStateOf(false) }
     var showParserRules by rememberSaveable { mutableStateOf(false) }
+    val cards by vm.graph.cards.cards.collectAsStateWithLifecycle()
+    var showCardEditor by rememberSaveable { mutableStateOf(false) }
+    var cardRecords by remember { mutableStateOf<DashboardCardSpec?>(null) }
+    if(showCardEditor) { DashboardEditor(vm) { showCardEditor=false }; return }
     if (showParserRules) { ParserRulesScreen(vm) { showParserRules = false }; return }
     var showUpdates by rememberSaveable { mutableStateOf(false) }
     if (showUpdates) { UpdateScreen(onBack = { showUpdates = false }); return }
@@ -211,10 +214,11 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                         launchAfterPick = true
                         appPicker = type
                     }
-                },onSelect = { type,date -> select(type,date) },onInbox = { vm.filter(inbox = true); tab = 2 },onOpen = vm::open)
+                },onSelect = { type,date -> select(type,date) },onInbox = { vm.filter(inbox = true); tab = 2 },onOpen = vm::open,vm=vm,cards=cards,onEdit={showCardEditor=true},onCard={cardRecords=it})
                 1, 2 -> TimelineContent(events,query,onQuery = { vm.query.value = it },onOpen = vm::open)
                 3 -> key(settingsPage) { Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (settingsPage == null) SettingsOverview(enabled, permissionStates, states) { settingsPage = it }
+                    if (settingsPage == SettingsPage.THEME) ThemeSettings()
                     if (settingsPage == SettingsPage.COLLECTION) {
                     SettingsCard("생활 데이터 이용 안내", "HEALTH") {
                         Text(PRIVACY, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -260,8 +264,12 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                             Text(state, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    SpotTraceSettings(vm)
                     }
-                    if (settingsPage == SettingsPage.HOME_APPS) HomeAppLinkSettings(appLinks, appLinkRevision) { type -> launchAfterPick = false; appPicker = type }
+                    if (settingsPage == SettingsPage.HOME_APPS) {
+                        OutlinedButton(onClick={showCardEditor=true},modifier=Modifier.fillMaxWidth()) { Text("카드 추가 · 순서 · 나만의 집계") }
+                        HomeAppLinkSettings(appLinks, appLinkRevision) { type -> launchAfterPick = false; appPicker = type }
+                    }
                     if (settingsPage == SettingsPage.NOTIFICATIONS) SettingsCard("알림 분류 및 보관", "NOTIFICATION") {
                         SettingsMenuRow("알림 분류 규칙", "규칙 추가 · 수정 · 순서 · 예시 테스트", "NOTIFICATION", !busy) { showParserRules = true }
                         HorizontalDivider()
@@ -280,6 +288,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
             }
         }
     }
+    cardRecords?.let { CardRecordsDialog(vm,it) { cardRecords=null } }
     appPicker?.let { type ->
         HomeAppPicker(type, appLinks, onChoose = { packageName ->
             appLinks.select(type, packageName)
@@ -292,6 +301,6 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
         }, onDismiss = { appPicker = null; launchAfterPick = false })
     }
     detail?.let { EventDetailDialog(it, busy = busy, message = message, onClassify = { type, amount, cancelled -> vm.classify(it.event.id,type,amount,cancelled) }, onDelete = { vm.deleteNotification(it.event.id) }, onDismiss = { vm.detail.value = null }) }
-    if (deleteConfirm) AlertDialog(onDismissRequest = { deleteConfirm = false }, title = { Text("저장된 데이터를 모두 삭제할까요?") }, text = { Text("이 앱의 원본·이벤트·집계를 삭제하고 수집을 중지해요. 원래 캘린더와 건강 앱의 데이터는 삭제하지 않아요.") }, confirmButton = { TextButton(onClick = { deleteConfirm = false; enabled = false; vm.work { vm.graph.clear() }; vm.detail.value = null }) { Text("삭제") } }, dismissButton = { TextButton(onClick = { deleteConfirm = false }) { Text("취소") } })
+    if (deleteConfirm) AlertDialog(onDismissRequest = { deleteConfirm = false }, title = { Text("저장된 데이터를 모두 삭제할까요?") }, text = { Text("이 앱의 원본·이벤트·집계를 삭제하고 수집과 SpotTrace 연동을 중지해요. 카드 구성은 유지해요. 원래 캘린더·건강·SpotTrace 데이터는 삭제하지 않아요.") }, confirmButton = { TextButton(onClick = { deleteConfirm = false; enabled = false; vm.work { vm.graph.clear() }; vm.detail.value = null }) { Text("삭제") } }, dismissButton = { TextButton(onClick = { deleteConfirm = false }) { Text("취소") } })
 }
-fun sourceLabel(source: String) = when (source) { "CALENDAR" -> "일정"; "HEALTH_CONNECT" -> "건강"; "NOTIFICATION" -> "알림"; else -> "집계" }
+fun sourceLabel(source: String) = when (source) { "CALENDAR" -> "일정"; "HEALTH_CONNECT" -> "건강"; "NOTIFICATION" -> "알림"; "SPOTTRACE" -> "SpotTrace 방문"; else -> "집계" }
