@@ -63,17 +63,25 @@ class CalendarCollector(private val context: Context, private val repository: Li
 }
 
 class HealthCollector(private val context: Context, private val repository: LifeRepository) {
+    val diagnostics = HealthDiagnostics(context)
     companion object {
         val permissions = setOf(HealthPermission.getReadPermission(StepsRecord::class), HealthPermission.getReadPermission(SleepSessionRecord::class), HealthPermission.getReadPermission(ExerciseSessionRecord::class))
     }
     fun availability() = HealthConnectClient.getSdkStatus(context)
     fun client() = HealthConnectClient.getOrCreate(context)
     fun backgroundSupported(): Boolean = availability() == HealthConnectClient.SDK_AVAILABLE && client().features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
-    suspend fun collect(background: Boolean) {
+    suspend fun collect(background: Boolean) = diagnostics.capture(background) { trace -> collectInternal(background, trace) }
+    private suspend fun collectInternal(background: Boolean, trace: HealthTrace) {
         check(availability() == HealthConnectClient.SDK_AVAILABLE) { "Health Connect 설치 또는 업데이트가 필요해요" }
         val client = client()
+        trace.at(HealthStage.PERMISSIONS)
         val granted = client.permissionController.getGrantedPermissions()
+        trace.permissions(HealthPermission.getReadPermission(StepsRecord::class) in granted,
+            HealthPermission.getReadPermission(SleepSessionRecord::class) in granted,
+            HealthPermission.getReadPermission(ExerciseSessionRecord::class) in granted,
+            HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND in granted)
         if (!granted.containsAll(permissions)) throw SecurityException("걸음·수면·운동 읽기 권한이 필요해요")
+        trace.at(HealthStage.BACKGROUND)
         if (background && (!backgroundSupported() || HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND !in granted)) throw SecurityException("건강 데이터는 앱을 열면 갱신돼요 (백그라운드 권한 없음)")
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now(zone)
@@ -90,39 +98,54 @@ class HealthCollector(private val context: Context, private val repository: Life
             while (!day.isAfter(last)) { changedStepDates.add(day); day = day.plusDays(1) }
         }
         var changesToken = prefs.getString("token", null)
+        trace.at(HealthStage.TOKEN)
         if (changesToken == null) changesToken = client.getChangesToken(ChangesTokenRequest(setOf(StepsRecord::class, SleepSessionRecord::class, ExerciseSessionRecord::class)))
         suspend fun store(record: Record) {
+            val type = when (record) { is StepsRecord -> "STEP"; is SleepSessionRecord -> "SLEEP"; is ExerciseSessionRecord -> "EXERCISE"; else -> "ALL" }
+            trace.processing(HealthStage.NORMALIZE, type)
             val key = record.metadata.id
             seen.add(key)
             val (begin, json) = HealthNormalizer.payload(record)
+            trace.processing(HealthStage.STORE, type)
             if (record is StepsRecord) trackSteps(repository.dao.event("HEALTH_CONNECT", key))
             val stored = repository.ingest("HEALTH_CONNECT", key, begin, json)
             if (record is StepsRecord) trackSteps(stored)
         }
         var token: String? = null
+        var pageNumber = 0
         do {
+            trace.at(HealthStage.READ, "STEP", ++pageNumber)
             val page = client.readRecords(ReadRecordsRequest(StepsRecord::class, TimeRangeFilter.between(start, end), pageToken = token))
             page.records.forEach { store(it) }; token = page.pageToken
         } while (token != null)
+        pageNumber = 0
         do {
+            trace.at(HealthStage.READ, "SLEEP", ++pageNumber)
             val page = client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, TimeRangeFilter.between(start, end), pageToken = token))
             page.records.forEach { store(it) }; token = page.pageToken
         } while (token != null)
+        pageNumber = 0
         do {
+            trace.at(HealthStage.READ, "EXERCISE", ++pageNumber)
             val page = client.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, TimeRangeFilter.between(start, end), pageToken = token))
             page.records.forEach { store(it) }; token = page.pageToken
         } while (token != null)
+        trace.at(HealthStage.RECONCILE)
         repository.dao.sourceWindow("HEALTH_CONNECT", start.toEpochMilli(), end.toEpochMilli()).filter { it.sourceId !in seen }.forEach { repository.markDeleted(it) }
         var hasMore: Boolean
+        pageNumber = 0
         do {
+            trace.at(HealthStage.CHANGES, page = ++pageNumber)
             val changes = client.getChanges(requireNotNull(changesToken))
             if (changes.changesTokenExpired) {
                 // The bounded snapshot repaired recent history; older history is explicitly unverified.
                 prefs.edit().remove("token").putBoolean("historyGap", true).commit()
+                trace.at(HealthStage.TOKEN)
                 changesToken = client.getChangesToken(ChangesTokenRequest(setOf(StepsRecord::class, SleepSessionRecord::class, ExerciseSessionRecord::class)))
                 break
             }
             changes.changes.forEach { change ->
+                trace.at(HealthStage.APPLY_CHANGES, page = pageNumber)
                 when (change) {
                     is UpsertionChange -> store(change.record)
                     is DeletionChange -> repository.dao.event("HEALTH_CONNECT", change.recordId)?.let { trackSteps(it); repository.markDeleted(it) }
@@ -132,6 +155,7 @@ class HealthCollector(private val context: Context, private val repository: Life
             hasMore = changes.hasMore
         } while (hasMore)
         // A change outside the permitted read window must not leave a known-stale step total active.
+        trace.at(HealthStage.OLD_TOTALS, "STEP_SUMMARY")
         for (day in changedStepDates.filter { it.isBefore(today.minusDays(29)) }) {
             repository.dao.event("DERIVED", "steps:$day")?.let { old ->
                 repository.ingest("DERIVED", "steps:$day", old.occurredAt, JSONObject(old.dataJson)
@@ -139,11 +163,13 @@ class HealthCollector(private val context: Context, private val repository: Life
             }
         }
         for (offset in 0L..29L) {
+            trace.at(HealthStage.AGGREGATE, "STEP_SUMMARY", dayOffset = offset.toInt())
             val day = today.minusDays(offset)
             val dayStart = day.atStartOfDay(zone).toInstant()
             val dayEnd = minOf(day.plusDays(1).atStartOfDay(zone).toInstant(), end)
             val result = client.aggregate(AggregateRequest(setOf(StepsRecord.COUNT_TOTAL), TimeRangeFilter.between(dayStart, dayEnd)))
             val count = result[StepsRecord.COUNT_TOTAL]
+            trace.at(HealthStage.STORE_TOTAL, "STEP_SUMMARY", dayOffset = offset.toInt())
             val json = JSONObject().put("schemaVersion", 1).put("type", "STEP_SUMMARY").put("category", "HEALTH").put("title", "하루 걸음수")
                 .put("summary", count?.let { "${it}보" } ?: "기록 없음").put("count", count ?: 0L).put("date", day.toString()).put("zone", zone.id)
                 .put("status", if (count == null) "NO_DATA" else "ACTIVE")
@@ -152,6 +178,7 @@ class HealthCollector(private val context: Context, private val repository: Life
             repository.ingest("DERIVED", "steps:$day", dayStart.toEpochMilli(), json)
         }
         // Commit only after records, deletions and daily aggregates have all succeeded.
+        trace.at(HealthStage.SAVE_TOKEN)
         prefs.edit().putString("token", changesToken).commit()
     }
 }

@@ -434,3 +434,22 @@ v0.2.0 공개 배포와 인증 없는 APK 재다운로드 검증을 완료했다
 - 복구 방향 제안: 자료형별 성공/실패를 분리하고 성공한 건강 항목은 계속 제공한다. 실패한 항목은 마지막 정상 값과 오래됨 표시를 유지한다. 변경 토큰도 자료형별로 분리하며, 실패·부분 조회를 근거로 삭제 대조하거나 정상 0으로 표시하지 않는다. 단계별 진단 확보 후 실제 실패 지점에 최소 수정한다. 아직 구현하지 않았다.
 - 공식 근거: https://developer.android.com/health-and-fitness/health-connect/read-data 및 https://developer.android.com/health-and-fitness/health-connect/sync-data . SDK 버전/알려진 수정 확인: https://developer.android.com/jetpack/androidx/releases/health-connect .
 - 검증 범위: 소스/태그 diff/실제 의존성 소스/기존 테스트 범위/공식 문서 조사. 이번에는 앱 코드 수정, 빌드/테스트 실행, 실기기 재현, 설치/배포를 하지 않았다. 과거 Health Connect 계측 검증은 빈 데이터 환경이므로 실제 다중 페이지/복잡한 수면·운동 응답의 증거가 아니다.
+
+## 2026-10-09 — 첨부 Logcat의 알림 Parcelable 오류 분석
+
+- 첨부 스택은 Parcel의 `ClassNotFoundException`이며 NotificationPayload.captureExtras의 중첩 Bundle.get(35행) → create → LifeNotificationListener 경로다. HealthCollector 또는 Health Connect SDK 호출은 없다. 앞서 보고된 건강 IllegalArgumentException의 원인 증거로 사용할 수 없다.
+- 알림에 포함된 사용자 정의 Parcelable 클래스를 현재 앱 classloader에서 찾지 못한 상황이다. 해당 클래스의 제공 앱은 스택만으로 식별할 수 없다. 외부 알림 extras 전체를 재귀적으로 읽는 현재 구조가 접근을 유발한다.
+- Android Parcel은 ClassNotFoundException을 Log.e로 먼저 출력한 뒤 BadParcelableException을 던진다. 현재 NotificationPayload.safe의 catch(Exception)은 이를 필드별 unavailable/captureErrors로 격리하도록 구현돼 있다. 따라서 이 E 로그 자체는 미처리 충돌의 증거가 아니며, 첨부에는 FATAL EXCEPTION이나 프로세스 종료 증거가 없다. 해당 건의 최종 DB 저장 성공까지 확인한 것은 아니다.
+- 후속 개선 방향: 표준 알림 텍스트/메시지 extras 중심의 수집 범위를 검토하고 불필요한 앱 전용 객체 역직렬화를 피한다. 임의 키 전체 보존과의 trade-off가 있어 이번 분석만으로 수집 범위를 변경하지 않았다. catch 추가만으로 Parcel이 이미 출력한 로그가 없어지지는 않는다.
+- 건강 수집 오류는 별도 단계별 진단이 필요하다. 현재 건강 catch는 스택을 기록하지 않아 같은 시각 Logcat에 상세 원인이 반드시 존재하는 것은 아니다.
+- 근거: 로컬 NotificationPayload.kt/Collectors.kt/LifeApplication.kt 및 Android 공식 Parcel 소스 https://android.googlesource.com/platform/frameworks/base/+/master/core/java/android/os/Parcel.java . 이번에는 앱 코드/버전/배포 변경 및 테스트 실행 없음. 첨부 원문은 저장소에 복사하지 않았다.
+
+## 2026-10-09 — 건강 연결 진단 구현
+
+- 사용자 승인으로 HealthDiagnostics/HealthDiagnosticsSettings를 추가했다. 자동/수동 건강 수집을 동일 진단 래퍼로 감싸며 지원·권한·토큰·원본 조회와 SDK 변환·정규화·저장·삭제 대조·변경 이력·걸음 합계·토큰 저장 단계를 구분한다.
+- 진단은 기존 수집을 실제로 재실행한다. AppGraph syncMutex와 수집 동의를 유지하며 건강만 수집하고 일간 집계를 갱신한다. 수집 기간/원본 보존/삭제 대조/토큰 정책은 변경하지 않는다. 일부 항목 독립 수집은 이번 범위가 아니다.
+- 설정 → 데이터 수집 및 권한 → 건강 연결 진단: 실행, 미리보기, 선택/복사. 전송은 하지 않으며 사용자가 복사한 내용을 직접 전달한다.
+- 전용 health-diagnostics 설정에는 최근 시도 한 건, 마지막 실패 한 건, 마지막 성공 시각만 보관한다. 성공 재시도 이후에도 이전 실패를 유지한다. 수집 취소는 CANCELLED이며 실패로 기록하지 않고 전파한다. 전체 생활 데이터 삭제 시 진단도 삭제한다.
+- 보고서에는 앱/Android API/SDK extension/Health Connect 제공 패키지 버전·라이브러리 버전, 전경/배경, 권한별 boolean, 고정 조회 기간 길이, 자료형/페이지/합계 날짜 offset, 허용된 예외 분류·플랫폼 오류 코드·스택 위치만 기록한다. 제공 패키지 버전 확인 실패는 미확인으로 남긴다.
+- 건강 값·원문·record ID·변경/page 토큰·원본 예외 message/cause 문자열·스택 파일명은 저장하지 않는다. 오류 사유는 정확히 일치하는 SDK 고정 메시지만 코드로 분류한다. cause는 최대 4개, 허용 패키지 스택은 각 8개로 제한한다. 잘못된 기존 진단 JSON은 앱 초기화를 막지 않는다.
+- 이 변경은 실패 원인 수집 기능이며, 사용자의 Health Connect IllegalArgumentException이나 알림 Parcelable 로그 자체를 해결했다는 뜻이 아니다. APK 공개 배포 및 실기기 재현은 별도다.

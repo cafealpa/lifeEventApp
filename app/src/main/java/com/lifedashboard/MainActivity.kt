@@ -264,6 +264,7 @@ fun LifeScreen(vm: LifeViewModel = viewModel()) {
                             Text(state, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    HealthDiagnosticsSettings(vm)
                     SpotTraceSettings(vm)
                     }
                     if (settingsPage == SettingsPage.HOME_APPS) {

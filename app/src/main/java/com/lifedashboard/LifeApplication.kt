@@ -52,7 +52,7 @@ class AppGraph(val context: Context) {
             status.set(source, "수집 중")
             try { block(); status.success(source) }
             catch (e: CancellationException) { throw e }
-            catch (e: Exception) { successful = false; status.set(source, if (e is SecurityException || e is IllegalStateException) e.message ?: "권한 또는 지원 상태 확인 필요" else "수집 실패: ${e.javaClass.simpleName}") }
+            catch (e: Exception) { successful = false; status.set(source, if (source == "HEALTH_CONNECT") health.diagnostics.failureSummary() else if (e is SecurityException || e is IllegalStateException) e.message ?: "권한 또는 지원 상태 확인 필요" else "수집 실패: ${e.javaClass.simpleName}") }
         }
         val recoveryFailures = repository.recoverPending()
         run("CALENDAR") { calendar.collect() }
@@ -66,6 +66,19 @@ class AppGraph(val context: Context) {
         if (recoveryFailures > 0) status.set("PROCESSING", "집계 완료 · 분석 실패 원본 ${recoveryFailures}건 보존 중")
     }
     suspend fun purgeExpiredNotifications() = syncMutex.withLock { repository.purgeExpiredNotifications() }
+    suspend fun diagnoseHealth() = syncMutex.withLock {
+        check(status.enabled()) { "생활 데이터 수집을 먼저 켜 주세요" }
+        status.set("HEALTH_CONNECT", "진단 중")
+        try {
+            health.collect(background = false)
+            status.success("HEALTH_CONNECT")
+            if (context.getSharedPreferences("health-sync", Context.MODE_PRIVATE).getBoolean("historyGap", false)) {
+                status.set("HEALTH_CONNECT", "최근 29일 갱신 · 변경 토큰 만료로 이전 기록의 변경 여부는 미확인")
+            }
+        } catch (e: CancellationException) { throw e }
+          catch (_: Exception) { status.set("HEALTH_CONNECT", health.diagnostics.failureSummary()) }
+        deriveInternal()
+    }
     suspend fun setSpotTraceEnabled(value: Boolean) = syncMutex.withLock {
         spotTrace.enable(value)
         status.set("SPOTTRACE",if(value) "연동 켜짐 · 새로고침 필요" else "연동 꺼짐 · 저장 기록 유지")
@@ -117,6 +130,7 @@ class AppGraph(val context: Context) {
         status.enable(false)
         repository.clear()
         context.getSharedPreferences("health-sync", Context.MODE_PRIVATE).edit().clear().commit()
+        health.diagnostics.clear()
         context.getSharedPreferences("notification-active", Context.MODE_PRIVATE).edit().clear().commit()
         spotTrace.clear()
         status.clear()

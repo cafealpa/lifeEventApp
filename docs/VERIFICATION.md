@@ -318,3 +318,10 @@ JDK 21에서 두 프로젝트 각각 다음 작업을 실행했다.
 ### v0.8.0 공개 게시 확인
 
 인증 없는 GitHub latest API에서 v0.8.0/draft=false/prerelease=false, 세 자산의 uploaded 상태를 확인했다. 공개 update.json의 schemaVersion/applicationId/versionCode/versionName/minSdk/apkName/apkSize/sha256을 로컬과 대조했고 공개 SHA256SUMS 및 GitHub APK digest/크기도 일치했다. APK 자체 재다운로드 및 실기기 설치는 수행하지 않았다. 태그 소스 커밋 fe6236d.
+
+## 2026-10-09 — 건강 진단 기능 검증
+
+- JDK 21, `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:lintDebug --console=plain --no-daemon --max-workers=2` 최종 성공(1분 26초). 첫 lint 실행의 WrongConstant 수정 후 재실행했다.
+- 테스트 108개, 실패/오류 0. 신규 HealthDiagnosticsTest 6개. lint 오류 0/경고 52. git diff --check 통과.
+- APK app/build/outputs/apk/debug/app-debug.apk: 34,032,648 bytes; SHA-256 df62e28447499d54442a5e5fc65e5f08a613f303493399494b2a74c3dbc66e97. apksigner로 기존 공개 인증서 일치 확인.
+- 연결 단말 읽기 전용 확인: API 36, 설치 Life Dashboard 0.8.0(9), 건강 4개 읽기 권한 허용. 자동 검증과 별개이며 새 APK 설치/진단 UI/복사/오류 재현은 하지 않았다. 공개 배포 미수행.
