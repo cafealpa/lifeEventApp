@@ -314,3 +314,7 @@ JDK 21에서 두 프로젝트 각각 다음 작업을 실행했다.
 - APK: release-output/v0.8.0/LifeDashboard.apk, 25,978,164 bytes; SHA-256 `3a0786b821e84c9a5f424c23353c501c6cb46fe1eebc739b2e2577bea6df3429`.
 - SpotTrace 연동/카드 편집/테마 및 v0.7.0 이후 알림 개별 삭제 포함. Health Connect 오류 수정/진단 UI는 미포함.
 - 실제 단말 설치/Provider IPC/화면 검증은 미수행. 게시 후 공개 메타데이터 및 GitHub digest를 확인하며 이전 사용자 요청에 따라 APK 재다운로드는 생략한다.
+
+### v0.8.0 공개 게시 확인
+
+인증 없는 GitHub latest API에서 v0.8.0/draft=false/prerelease=false, 세 자산의 uploaded 상태를 확인했다. 공개 update.json의 schemaVersion/applicationId/versionCode/versionName/minSdk/apkName/apkSize/sha256을 로컬과 대조했고 공개 SHA256SUMS 및 GitHub APK digest/크기도 일치했다. APK 자체 재다운로드 및 실기기 설치는 수행하지 않았다. 태그 소스 커밋 fe6236d.

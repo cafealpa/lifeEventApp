@@ -508,3 +508,14 @@ AGENTS.md를 기반으로 개발 계획, 개발 참고, 인수인계 문서 및 
 - 기존 서명/DB schema v1을 유지한다. Health Connect 오류 조사와 진단 UI 제안은 해결·구현 완료로 표시하지 않는다.
 - 로컬 scripts/release.ps1로 테스트/Release lint/build/서명/패키지를 검증한 뒤 커밋·main·태그·APK/update.json/SHA256SUMS.txt를 게시한다. 앞선 사용자 요청에 따라 공개 APK 재다운로드는 생략하고 공개 메타데이터 및 GitHub digest를 대조한다.
 - 단말 설치/화면/Provider IPC는 미검증이며 문제 발생 시 기존 데이터 삭제나 다운그레이드 대신 높은 버전 코드의 수정판을 배포한다.
+
+## 2026-10-09 — v0.8.0 공개 배포 완료
+
+- https://github.com/cafealpa/lifeEventApp/releases/tag/v0.8.0 정식/latest 게시 완료. 소스 태그 fe6236d, versionCode 9.
+- SpotTrace 수집/방문 타임라인, 기본·사용자 카드 편집과 근거 목록, 6개 테마 및 알림 개별 삭제가 공개 APK에 포함된다. 이전 미배포 기록은 당시 상태다. SpotTrace 앱 자체는 이번 작업에서 재배포하지 않았다.
+- 단위 테스트 102개 통과, Release lint 오류 0/경고 50, Release 빌드/기존 인증서/패키지/버전/non-debuggable 검증 통과.
+- 소스/main/tag 및 LifeDashboard.apk/update.json/SHA256SUMS.txt 게시 완료. 인증 없는 latest API, 공개 update.json/체크섬 조회 및 GitHub APK digest·크기 대조 성공. APK 재다운로드는 기존 사용자 요청대로 생략했다.
+- APK 25,978,164 bytes, SHA-256 3a0786b821e84c9a5f424c23353c501c6cb46fe1eebc739b2e2577bea6df3429.
+- 사용자 사용 경로: 설정 → 앱 정보 → 앱 업데이트 → 0.8.0 설치. 이후 데이터 수집 및 권한 → SpotTrace 방문 기록 → 방문 기록 가져오기/지금 가져오기, 홈 → 카드 편집.
+- [ ] API 35 이상 단말에서 업데이트 후 실제 SpotTrace 조회/권한/카드 편집/테마 화면을 확인한다. 설치/실기기 IPC는 아직 검증하지 않았다.
+- [ ] Health Connect IllegalArgumentException은 별도 조사 항목이며 이번 버전으로 해결됐다고 표시하지 않는다.
