@@ -343,3 +343,7 @@ JDK 21에서 두 프로젝트 각각 다음 작업을 실행했다.
 - 첫 테스트 실행은 테스트 metadata의 dataOrigin 누락을 수정했고, lint의 SDK 내부 변경 객체 생성자 호출 3건은 앱 자체 자료형으로 대체했다. 억제하거나 baseline으로 제외하지 않았다.
 - 최종 JDK 21 scripts/release.ps1 성공(32초): testDebugUnitTest 114개 실패/오류 0, lintRelease/assembleRelease 및 기존 서명/패키지/버전 0.8.2(11)/non-debuggable 검사 통과. diff 검사 통과.
 - 실제 단말의 동일 데이터로 모든 원본·변경·aggregate 단계가 성공하는지는 미검증이다. 새 수정판 공개 후 사용자 진단으로 확인한다.
+
+### v0.8.2 공개 검증 완료
+
+정식/latest v0.8.2, 태그 da49905, versionCode 11 게시 완료. APK 26,060,144 bytes, SHA-256 e1adc0c821cff02d51dc555f85003582eedbebe81a3d2edacf743673d4391f9d. 인증 없는 latest API·공개 update.json 전 필드·SHA256SUMS 및 GitHub APK digest/크기 대조 통과. APK 재다운로드는 기존 요청대로 생략. 실제 단말 수정판 설치/전체 수집 재현은 미수행.
