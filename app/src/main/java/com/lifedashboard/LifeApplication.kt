@@ -58,9 +58,7 @@ class AppGraph(val context: Context) {
         run("CALENDAR") { calendar.collect() }
         run("HEALTH_CONNECT") { health.collect(background) }
         if(spotTrace.enabled()) run("SPOTTRACE") { spotTrace.collect() } else status.set("SPOTTRACE","연동 꺼짐")
-        if (status.states.value.getValue("HEALTH_CONNECT").startsWith("수집 완료") && context.getSharedPreferences("health-sync", Context.MODE_PRIVATE).getBoolean("historyGap", false)) {
-            status.set("HEALTH_CONNECT", "최근 29일 갱신 · 변경 토큰 만료로 이전 기록의 변경 여부는 미확인")
-        }
+        if (status.states.value.getValue("HEALTH_CONNECT").startsWith("수집 완료")) healthCollectionWarnings()
         deriveInternal()
         if (successful && recoveryFailures == 0) resumeGate.completed(android.os.SystemClock.elapsedRealtime(), day, zone)
         if (recoveryFailures > 0) status.set("PROCESSING", "집계 완료 · 분석 실패 원본 ${recoveryFailures}건 보존 중")
@@ -72,9 +70,7 @@ class AppGraph(val context: Context) {
         try {
             health.collect(background = false)
             status.success("HEALTH_CONNECT")
-            if (context.getSharedPreferences("health-sync", Context.MODE_PRIVATE).getBoolean("historyGap", false)) {
-                status.set("HEALTH_CONNECT", "최근 29일 갱신 · 변경 토큰 만료로 이전 기록의 변경 여부는 미확인")
-            }
+            healthCollectionWarnings()
         } catch (e: CancellationException) { throw e }
           catch (_: Exception) { status.set("HEALTH_CONNECT", health.diagnostics.failureSummary()) }
         deriveInternal()
@@ -82,6 +78,13 @@ class AppGraph(val context: Context) {
     suspend fun setSpotTraceEnabled(value: Boolean) = syncMutex.withLock {
         spotTrace.enable(value)
         status.set("SPOTTRACE",if(value) "연동 켜짐 · 새로고침 필요" else "연동 꺼짐 · 저장 기록 유지")
+    }
+    private fun healthCollectionWarnings() {
+        val prefs = context.getSharedPreferences("health-sync", Context.MODE_PRIVATE)
+        val messages = mutableListOf<String>()
+        if (prefs.getInt("invalidSteps", 0) > 0) messages += "시간 범위 확인이 필요한 걸음 원본 ${prefs.getInt("invalidSteps", 0)}건 별도 보존"
+        if (prefs.getBoolean("historyGap", false)) messages += "변경 토큰 만료로 이전 기록의 변경 여부는 미확인"
+        if (messages.isNotEmpty()) status.set("HEALTH_CONNECT", "수집 완료 · " + messages.joinToString(" · "))
     }
     suspend fun reconnectSpotTrace() = syncMutex.withLock { spotTrace.allowNewDataset();status.set("SPOTTRACE","새 데이터 연결 대기 · 새로고침 필요") }
     fun scheduleRetention() {

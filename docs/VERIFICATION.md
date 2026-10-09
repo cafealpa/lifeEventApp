@@ -336,3 +336,10 @@ JDK 21에서 두 프로젝트 각각 다음 작업을 실행했다.
 ### v0.8.1 공개 검증 완료
 
 정식/latest v0.8.1(소스 태그 91a20ca), versionCode 10 게시 완료. 인증 없는 GitHub API로 draft=false/prerelease=false/자산 uploaded 확인, 공개 update.json 전 필드 및 SHA256SUMS와 로컬 파일/GitHub APK digest·크기 대조 통과. 기존 요청대로 공개 APK 재다운로드 생략. 실기기 설치/진단 UI/실제 오류 재현은 미수행.
+
+## 2026-10-09 — v0.8.2 걸음 기록 복구 검증
+
+- 사용자 진단의 StepsRecord 생성자 INVALID_TIME_RANGE를 동일 시각 플랫폼 걸음 기록으로 재현했다. HealthStepRecoveryTest 6개 추가: 원본 보존/정상 경로/타 예외 전파/복구 실패/Room 재수집·수정 복구/안전한 완료 경고.
+- 첫 테스트 실행은 테스트 metadata의 dataOrigin 누락을 수정했고, lint의 SDK 내부 변경 객체 생성자 호출 3건은 앱 자체 자료형으로 대체했다. 억제하거나 baseline으로 제외하지 않았다.
+- 최종 JDK 21 scripts/release.ps1 성공(32초): testDebugUnitTest 114개 실패/오류 0, lintRelease/assembleRelease 및 기존 서명/패키지/버전 0.8.2(11)/non-debuggable 검사 통과. diff 검사 통과.
+- 실제 단말의 동일 데이터로 모든 원본·변경·aggregate 단계가 성공하는지는 미검증이다. 새 수정판 공개 후 사용자 진단으로 확인한다.

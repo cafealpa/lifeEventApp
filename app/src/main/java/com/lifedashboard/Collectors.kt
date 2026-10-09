@@ -10,8 +10,6 @@ import android.service.notification.StatusBarNotification
 import androidx.core.content.ContextCompat
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
-import androidx.health.connect.client.changes.DeletionChange
-import androidx.health.connect.client.changes.UpsertionChange
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.*
 import androidx.health.connect.client.request.*
@@ -90,6 +88,8 @@ class HealthCollector(private val context: Context, private val repository: Life
         val end = Instant.now()
         val seen = mutableSetOf<String>()
         val prefs = context.getSharedPreferences("health-sync", Context.MODE_PRIVATE)
+        val recovery = HealthStepRecovery(context)
+        val invalidSteps = mutableSetOf<String>()
         val changedStepDates = mutableSetOf<LocalDate>()
         fun trackSteps(event: LifeEvent?) {
             if (event?.type != "STEP") return
@@ -100,7 +100,18 @@ class HealthCollector(private val context: Context, private val repository: Life
         var changesToken = prefs.getString("token", null)
         trace.at(HealthStage.TOKEN)
         if (changesToken == null) changesToken = client.getChangesToken(ChangesTokenRequest(setOf(StepsRecord::class, SleepSessionRecord::class, ExerciseSessionRecord::class)))
+        suspend fun storeStep(record: HealthStep) {
+            trace.processing(HealthStage.NORMALIZE, "STEP")
+            val (begin, json) = record.payload()
+            trace.processing(HealthStage.STORE, "STEP")
+            trackSteps(repository.dao.event("HEALTH_CONNECT", record.id))
+            trackSteps(repository.ingest("HEALTH_CONNECT", record.id, begin, json))
+            seen.add(record.id)
+            if (record.invalidTime) invalidSteps.add(record.id) else invalidSteps.remove(record.id)
+            trace.invalidSteps(invalidSteps.size)
+        }
         suspend fun store(record: Record) {
+            if (record is StepsRecord) { storeStep(HealthStep.from(record)); return }
             val type = when (record) { is StepsRecord -> "STEP"; is SleepSessionRecord -> "SLEEP"; is ExerciseSessionRecord -> "EXERCISE"; else -> "ALL" }
             trace.processing(HealthStage.NORMALIZE, type)
             val key = record.metadata.id
@@ -115,8 +126,8 @@ class HealthCollector(private val context: Context, private val repository: Life
         var pageNumber = 0
         do {
             trace.at(HealthStage.READ, "STEP", ++pageNumber)
-            val page = client.readRecords(ReadRecordsRequest(StepsRecord::class, TimeRangeFilter.between(start, end), pageToken = token))
-            page.records.forEach { store(it) }; token = page.pageToken
+            val page = recovery.read(client, start, end, token) { trace.processing(HealthStage.READ_RECOVERY, "STEP") }
+            page.records.forEach { storeStep(it) }; token = page.next
         } while (token != null)
         pageNumber = 0
         do {
@@ -136,23 +147,24 @@ class HealthCollector(private val context: Context, private val repository: Life
         pageNumber = 0
         do {
             trace.at(HealthStage.CHANGES, page = ++pageNumber)
-            val changes = client.getChanges(requireNotNull(changesToken))
-            if (changes.changesTokenExpired) {
+            val changes = recovery.changes(client, requireNotNull(changesToken)) { trace.at(HealthStage.CHANGES_RECOVERY, page = pageNumber) }
+            if (changes.expired) {
                 // The bounded snapshot repaired recent history; older history is explicitly unverified.
                 prefs.edit().remove("token").putBoolean("historyGap", true).commit()
                 trace.at(HealthStage.TOKEN)
                 changesToken = client.getChangesToken(ChangesTokenRequest(setOf(StepsRecord::class, SleepSessionRecord::class, ExerciseSessionRecord::class)))
                 break
             }
-            changes.changes.forEach { change ->
+            changes.steps.forEach { storeStep(it) }
+            changes.records.forEach { store(it) }
+            changes.deletions.forEach { recordId ->
                 trace.at(HealthStage.APPLY_CHANGES, page = pageNumber)
-                when (change) {
-                    is UpsertionChange -> store(change.record)
-                    is DeletionChange -> repository.dao.event("HEALTH_CONNECT", change.recordId)?.let { trackSteps(it); repository.markDeleted(it) }
-                }
+                repository.dao.event("HEALTH_CONNECT", recordId)?.let { trackSteps(it); repository.markDeleted(it) }
+                invalidSteps.remove(recordId)
+                trace.invalidSteps(invalidSteps.size)
             }
-            changesToken = changes.nextChangesToken
-            hasMore = changes.hasMore
+            changesToken = changes.next
+            hasMore = changes.more
         } while (hasMore)
         // A change outside the permitted read window must not leave a known-stale step total active.
         trace.at(HealthStage.OLD_TOTALS, "STEP_SUMMARY")
@@ -179,7 +191,7 @@ class HealthCollector(private val context: Context, private val repository: Life
         }
         // Commit only after records, deletions and daily aggregates have all succeeded.
         trace.at(HealthStage.SAVE_TOKEN)
-        prefs.edit().putString("token", changesToken).commit()
+        prefs.edit().putString("token", changesToken).putInt("invalidSteps", invalidSteps.size).commit()
     }
 }
 
@@ -238,6 +250,7 @@ object HealthNormalizer {
         .registerTypeAdapter(ZoneOffset::class.java, JsonSerializer<ZoneOffset> { src, _, _ -> JsonPrimitive(src.toString()) }).create()
 
     fun payload(record: Record): Pair<Long, JSONObject> {
+            if (record is StepsRecord) return HealthStep.from(record).payload()
             val type: String; val begin: Instant; val finish: Instant; val title: String
             val detail = JSONObject(gson.toJson(record))
             when (record) {

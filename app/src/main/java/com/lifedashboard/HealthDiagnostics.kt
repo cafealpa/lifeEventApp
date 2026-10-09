@@ -14,6 +14,7 @@ enum class HealthStage(val label: String) {
     AVAILABILITY("지원 상태 확인"), PERMISSIONS("권한 확인"), BACKGROUND("백그라운드 지원 확인"),
     TOKEN("변경 토큰 발급"), READ("원본 조회·SDK 변환"), NORMALIZE("원본 정규화"),
     STORE("원본 저장"), RECONCILE("삭제 대조"), CHANGES("변경 이력 조회·SDK 변환"),
+    READ_RECOVERY("걸음 원본 호환 조회"), CHANGES_RECOVERY("변경 이력 호환 조회"),
     APPLY_CHANGES("변경 이력 반영"), OLD_TOTALS("과거 합계 상태 갱신"),
     AGGREGATE("걸음 합계 조회"), STORE_TOTAL("걸음 합계 저장"), SAVE_TOKEN("변경 토큰 저장")
 }
@@ -24,6 +25,8 @@ class HealthTrace internal constructor() {
     private var page = 0
     private var dayOffset = -1
     private var permissions: JSONObject? = null
+    var invalidStepCount = 0; private set
+    fun invalidSteps(count: Int) { invalidStepCount = count }
     fun at(stage: HealthStage, type: String = "ALL", page: Int = 0, dayOffset: Int = -1) {
         require(type in setOf("ALL", "STEP", "SLEEP", "EXERCISE", "STEP_SUMMARY"))
         this.stage = stage; this.type = type; this.page = page; this.dayOffset = dayOffset
@@ -34,7 +37,7 @@ class HealthTrace internal constructor() {
     fun processing(stage: HealthStage, type: String) = at(stage, type, page, dayOffset)
     internal fun json() = JSONObject().put("stage", stage.name).put("stageLabel", stage.label)
         .put("recordType", type).put("page", page).put("aggregateDaysAgo", dayOffset)
-        .put("permissions", permissions ?: JSONObject.NULL)
+        .put("permissions", permissions ?: JSONObject.NULL).put("invalidStepRecords", invalidStepCount)
 }
 
 /** Allowlisted metadata only: never serialize records, token values or exception messages. */
@@ -60,7 +63,7 @@ class HealthDiagnostics(private val context: Context) {
         save(JSONObject(entry.toString()).put("result", "RUNNING"))
         try {
             block(trace)
-            entry.put("result", "SUCCESS")
+            entry.put("result", if (trace.invalidStepCount > 0) "SUCCESS_WITH_WARNINGS" else "SUCCESS")
         } catch (e: CancellationException) {
             entry.put("result", "CANCELLED")
             throw e
@@ -75,7 +78,7 @@ class HealthDiagnostics(private val context: Context) {
     private fun save(entry: JSONObject) {
         prefs.edit().putString("latest", entry.toString()).apply {
             if (entry.optString("result") == "FAILED") putString("lastFailure", entry.toString())
-            if (entry.optString("result") == "SUCCESS") putString("lastSuccessAt", entry.getString("finishedAt"))
+            if (entry.optString("result") in setOf("SUCCESS", "SUCCESS_WITH_WARNINGS")) putString("lastSuccessAt", entry.getString("finishedAt"))
         }.apply()
         state.value = report()
     }
