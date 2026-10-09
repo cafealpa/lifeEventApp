@@ -325,3 +325,10 @@ JDK 21에서 두 프로젝트 각각 다음 작업을 실행했다.
 - 테스트 108개, 실패/오류 0. 신규 HealthDiagnosticsTest 6개. lint 오류 0/경고 52. git diff --check 통과.
 - APK app/build/outputs/apk/debug/app-debug.apk: 34,032,648 bytes; SHA-256 df62e28447499d54442a5e5fc65e5f08a613f303493399494b2a74c3dbc66e97. apksigner로 기존 공개 인증서 일치 확인.
 - 연결 단말 읽기 전용 확인: API 36, 설치 Life Dashboard 0.8.0(9), 건강 4개 읽기 권한 허용. 자동 검증과 별개이며 새 APK 설치/진단 UI/복사/오류 재현은 하지 않았다. 공개 배포 미수행.
+
+## 2026-10-09 — v0.8.1 Release 검증
+
+- JDK 21에서 scripts/release.ps1 로컬 실행 성공. testDebugUnitTest/lintRelease/assembleRelease 성공(58초), 테스트 108개 실패/오류 0, Release lint 오류 0/경고 52.
+- 기존 인증서·패키지·버전 0.8.1(10)·디버깅 비활성 확인. DB schema v1 유지.
+- APK release-output/v0.8.1/LifeDashboard.apk: 26,027,376 bytes; SHA-256 5e7367c4eae0e9deefbfe008d70b58da05a2daf506d6cda859f406ac1b2ad1a5.
+- 공개 APK 재다운로드는 기존 요청대로 생략하고 게시 후 메타데이터/체크섬/GitHub digest로 검증한다. 실제 폰 설치와 새 진단 화면 조작/오류 재현은 미수행.
